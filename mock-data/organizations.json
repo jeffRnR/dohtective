@@ -1,0 +1,16 @@
+[
+  {
+    "slug": "kula-kitchen-group",
+    "company_name": "Kula Kitchen Group",
+    "data_file": "zoho-books-kula-kitchen-group.json",
+    "csv_file": "zoho-books-kula-kitchen-group.csv",
+    "branch_count": 3
+  },
+  {
+    "slug": "mbali-bistro-collective",
+    "company_name": "Mbali Bistro Collective",
+    "data_file": "zoho-books-mbali-bistro-collective.json",
+    "csv_file": "zoho-books-mbali-bistro-collective.csv",
+    "branch_count": 3
+  }
+]
