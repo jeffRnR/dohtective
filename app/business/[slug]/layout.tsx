@@ -26,7 +26,7 @@ export default function BusinessLayout({ children }: { children: React.ReactNode
   const [orgs, setOrgs] = useState<Org[]>([]);
 
   useEffect(() => {
-    // UI-side gate — the REAL enforcement is server-side in every API
+    // UI-side gate - the REAL enforcement is server-side in every API
     // route via requireBusinessMember() (see app/lib/authz.ts). This
     // redirect just avoids flashing a broken page to a signed-out
     // visitor; it is not the security boundary.
@@ -70,7 +70,7 @@ export default function BusinessLayout({ children }: { children: React.ReactNode
                   {currentOrg?.company_name ?? slug}
                 </p>
                 <p className="mt-0.5 text-[11px]" style={{ color: "var(--sage)" }}>
-                  {currentOrg ? `${currentOrg.branch_count} branches · ${currentOrg.role}` : "Loading…"}
+                  {currentOrg ? `${currentOrg.branch_count} branches - ${currentOrg.role}` : "Loading..."}
                 </p>
               </div>
             </div>

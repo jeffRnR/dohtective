@@ -3,7 +3,7 @@
 // That route conflated "manage businesses" with "Zoho integration" because
 // the old flat-file world made that easy to blur together. Now that
 // Business is a real, access-controlled Prisma model, creation needs a
-// signed-in user and a BusinessMember row — concerns /api/zoho shouldn't
+// signed-in user and a BusinessMember row - concerns /api/zoho shouldn't
 // own. /api/zoho is back to being purely about the Zoho OAuth/data flow.
 
 import { NextResponse } from "next/server";
@@ -18,7 +18,7 @@ function slugify(name: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-// Lists ONLY businesses the signed-in user is a member of — this is the
+// Lists ONLY businesses the signed-in user is a member of - this is the
 // actual fix for "every business shows up for everyone." Replaces the
 // old GET /api/zoho behavior of reading the entire flat organizations.json.
 export async function GET() {
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
   const baseSlug = slugify(companyName) || "business";
   let slug = baseSlug;
   let suffix = 1;
-  // Loop guards against slug collisions across ALL businesses globally —
+  // Loop guards against slug collisions across ALL businesses globally -
   // slugs are global (used in URLs), even though visibility is scoped
   // per-user via BusinessMember.
   while (await prisma.business.findUnique({ where: { slug } })) {
@@ -63,11 +63,11 @@ export async function POST(req: Request) {
     slug = `${baseSlug}-${suffix}`;
   }
 
-  // Business creation + first membership row written atomically — using
+  // Business creation + first membership row written atomically - using
   // Prisma's interactive transaction since the membership insert depends
   // on the business's generated id. (CHANGELOG: an earlier version of
   // this wrapped ONLY the business.create() in $transaction([...]) and
-  // ran businessMember.create() as a separate, unprotected call after —
+  // ran businessMember.create() as a separate, unprotected call after -
   // that was not actually atomic and could have produced exactly the
   // orphaned-business state this comment claims to prevent. Fixed to use
   // a real interactive transaction.)

@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 }
 
 export async function GET() {
-  // Status check — lets the dashboard show "Connected" / "Not configured"
+  // Status check - lets the dashboard show "Connected" / "Not configured"
   // without attempting a real push.
   let response: Response;
   try {

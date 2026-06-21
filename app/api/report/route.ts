@@ -1,5 +1,5 @@
 // app/api/report/route.ts
-// CHANGELOG: previously read mock-data/*.json with ZERO access control —
+// CHANGELOG: previously read mock-data/*.json with ZERO access control -
 // any caller who knew or guessed an org slug could pull that business's
 // full financial report. Now requires a verified BusinessMember row via
 // requireBusinessMember(), and reads transactions from Postgres (the real
@@ -33,7 +33,7 @@ export async function GET(req: Request) {
     prisma.bankStatement.findMany({ where: { businessId: business.id } }),
   ]);
 
-  // Reshape DB rows back into the snake_case shape engine.py expects —
+  // Reshape DB rows back into the snake_case shape engine.py expects -
   // the detection engine's contract was built against the original
   // Zoho-style JSON field names and there's no reason to change that
   // contract just because the storage layer changed underneath it.

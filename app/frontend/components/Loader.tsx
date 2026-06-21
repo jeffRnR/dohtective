@@ -1,6 +1,6 @@
 // app/frontend/components/Loader.tsx
 // Universal loading indicator. Use this everywhere instead of ad-hoc
-// "Loading…" text, so every wait in the app feels like the same product.
+// "Loading..." text, so every wait in the app feels like the same product.
 
 type LoaderProps = {
   label?: string;

@@ -22,7 +22,7 @@ export default function EvidencePanel({ report }: { report: ReportData }) {
         <span className="flex shrink-0 items-center gap-3 text-xs" style={{ color: "var(--sage)" }}>
           <span>
             {anomalyCount} transaction{anomalyCount === 1 ? "" : "s"}
-            {missingDocs > 0 ? ` · ${missingDocs} document${missingDocs === 1 ? "" : "s"} missing` : ""}
+            {missingDocs > 0 ? ` - ${missingDocs} document${missingDocs === 1 ? "" : "s"} missing` : ""}
           </span>
           <ChevronDown className="h-4 w-4 transition-transform" style={{ transform: open ? "rotate(180deg)" : "none" }} />
         </span>

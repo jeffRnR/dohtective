@@ -1,6 +1,6 @@
 // app/lib/zoho-client.ts
 // Real Zoho OAuth 2.0 client (Server-based Application flow). Distinct
-// from everything else in this project labeled "mock Zoho" — this file
+// from everything else in this project labeled "mock Zoho" - this file
 // makes actual HTTP calls to Zoho's accounts and API servers.
 //
 // Token storage note: tokens are persisted to mock-data/zoho-tokens.json
@@ -8,7 +8,7 @@
 // for a single-instance dev/demo deployment, NOT acceptable for production
 // (no encryption at rest, no concurrent-write safety, refresh tokens are
 // long-lived secrets). Before any real deployment, move this to a proper
-// database with encrypted columns — flagging explicitly so this isn't
+// database with encrypted columns - flagging explicitly so this isn't
 // mistaken for a production-ready pattern.
 
 import { readFile, writeFile } from "fs/promises";
@@ -24,7 +24,7 @@ const API_BASE_URL = process.env.ZOHO_API_BASE_URL ?? "https://www.zohoapis.com"
 
 // Scopes needed to read books data and discover the org's organization_id.
 // ZohoBooks.fullaccess.all is broad; narrow this to read-only scopes once
-// Zoho's docs confirm a read-only equivalent exists for your use case —
+// Zoho's docs confirm a read-only equivalent exists for your use case -
 // for now, full access is what lets onboarding actually pull real data.
 const SCOPES = "ZohoBooks.fullaccess.all";
 
@@ -32,7 +32,7 @@ export function assertZohoConfigured() {
   if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
     throw new Error(
       "Zoho OAuth is not configured. Set ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, and " +
-      "ZOHO_REDIRECT_URI in .env.local — see the setup steps in conversation history " +
+      "ZOHO_REDIRECT_URI in .env.local - see the setup steps in conversation history " +
       "or Zoho's Developer Console (api-console.zoho.com)."
     );
   }
@@ -105,7 +105,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenRes
   return data as TokenResponse;
 }
 
-// ── Token persistence (simple file store — see module docstring) ──
+// -- Token persistence (simple file store - see module docstring) --
 
 type StoredTokenRecord = {
   refresh_token: string;
@@ -148,7 +148,7 @@ export async function getStoredTokens(slug: string): Promise<StoredTokenRecord |
   return store[slug] ?? null;
 }
 
-// ── Authenticated API calls ──
+// -- Authenticated API calls --
 
 export async function zohoApiGet(slug: string, path: string, extraParams: Record<string, string> = {}) {
   const stored = await getStoredTokens(slug);

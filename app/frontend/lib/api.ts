@@ -1,6 +1,6 @@
 // app/frontend/lib/api.ts
 // Shared fetch helpers for the business routes. Each route page calls
-// these independently on mount — no shared client state between routes,
+// these independently on mount - no shared client state between routes,
 // which is the whole point: a refresh on /documents doesn't touch
 // whatever the dashboard route had in memory, because there IS no shared
 // memory, only re-fetched server data per route.
@@ -9,7 +9,7 @@ import type { Org, ZohoPayload } from "./types";
 
 // CHANGELOG: fetchOrgs now hits /api/businesses, not /api/zoho. The old
 // /api/zoho?GET returned EVERY business in the flat organizations.json
-// file with no access control — this is the actual fix for "every
+// file with no access control - this is the actual fix for "every
 // business shows up for everyone." /api/businesses requires a signed-in
 // session and only returns businesses the current user is a member of.
 export async function fetchOrgs(): Promise<Org[]> {

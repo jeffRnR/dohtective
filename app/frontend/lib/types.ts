@@ -1,11 +1,11 @@
 // app/frontend/lib/types.ts
-// Derived from backend/engine.py's build_report() output — engine.py is
+// Derived from backend/engine.py's build_report() output - engine.py is
 // the canonical detection engine (see its module docstring); this file
 // must track ITS output shape, not app/lib/analysis.ts's older TS port.
 //
 // CHANGELOG: engine.py has produced anomaly_transactions,
 // supporting_document_review, accounting_errors, and
-// cash_buffer_risk_level since the Check 1/3/4 fixes — but this file was
+// cash_buffer_risk_level since the Check 1/3/4 fixes - but this file was
 // never updated to match, so those fields were invisible to the frontend
 // (present in the JSON, untyped, unused) until AnomalyExplorer's build
 // broke on the missing type and surfaced the gap.
@@ -14,7 +14,7 @@ export type FlagItem = {
   title: string;
   detail: string;
   severity: "high" | "medium" | "low";
-  // Optional — only the mixed-funds flag sets these today (see engine.py).
+  // Optional - only the mixed-funds flag sets these today (see engine.py).
   // confidenceLabel is the plain-language string actually shown to a
   // non-technical SME owner; confidence is the raw level, kept for any
   // future internal use but not required for rendering.
@@ -75,9 +75,9 @@ export type ReportData = {
   skipped_malformed_transaction_count: number;
 };
 
-// CHANGELOG: data_file/csv_file removed — those were flat-file storage
+// CHANGELOG: data_file/csv_file removed - those were flat-file storage
 // artifacts (mock-data/*.json paths) that no longer exist now that
-// businesses are real Postgres rows. `role` added — reflects this user's
+// businesses are real Postgres rows. `role` added - reflects this user's
 // BusinessMember.role for this business, since the same business can
 // show up differently depending on who's looking at it (founder vs.
 // accountant), which matters for UI decisions like "can I add members."
@@ -96,7 +96,7 @@ export type ZohoMeta = {
   currency: string;
 };
 
-// Mirrors ZohoTransaction from app/lib/analysis.ts — kept as a loose alias
+// Mirrors ZohoTransaction from app/lib/analysis.ts - kept as a loose alias
 // rather than re-importing across the app/ and app/frontend/ boundary, so
 // the frontend has no compile-time dependency on backend-only code paths.
 export type FrontendTransaction = {

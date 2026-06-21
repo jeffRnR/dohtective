@@ -43,7 +43,7 @@ export default function BusinessDashboard() {
   }
 
   if (loading) {
-    return <Loader fullPage label="Loading your monthly risk report…" />;
+    return <Loader fullPage label="Loading your monthly risk report..." />;
   }
 
   if (error || !data) {

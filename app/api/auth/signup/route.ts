@@ -15,7 +15,7 @@ export async function POST(req: Request) {
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
-    // Deliberately vague — don't confirm/deny whether an email is
+    // Deliberately vague - don't confirm/deny whether an email is
     // registered to avoid leaking account existence to an attacker
     // probing emails.
     return NextResponse.json(
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     data: { email, name: name ?? null, passwordHash },
   });
 
-  // Resolve any pending invites for this email — this is what makes
+  // Resolve any pending invites for this email - this is what makes
   // BusinessInvite actually functional: someone gets added to a
   // business's member list by email BEFORE they have an account, and the
   // membership activates the moment they sign up with that exact email.

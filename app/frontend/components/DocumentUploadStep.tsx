@@ -27,7 +27,7 @@ const INITIAL_SLOTS: DocSlot[] = [
   {
     kind: "business_registration",
     label: "Business registration certificate",
-    unlocks: "Confirms the business is a separate legal entity — changes how we read mixed personal/business spending.",
+    unlocks: "Confirms the business is a separate legal entity - changes how we read mixed personal/business spending.",
     accept: ".pdf,.png,.jpg,.jpeg",
     status: "empty",
   },
@@ -47,8 +47,8 @@ const INITIAL_SLOTS: DocSlot[] = [
   },
 ];
 
-// Routed through Next.js, not called directly from the browser — keeps
-// the same browser -> Next.js -> Python pattern as every other call in
+// Routed through Next.js, not called directly from the browser - keeps
+// the same browser &rarr; Next.js &rarr; Python pattern as every other call in
 // the app, and means the Python service URL never needs to be public.
 
 export default function DocumentUploadStep({ onSkip }: { onSkip?: () => void }) {
@@ -96,14 +96,14 @@ export default function DocumentUploadStep({ onSkip }: { onSkip?: () => void }) 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="max-w-xl">
           <p className="text-xs font-bold uppercase tracking-[0.18em]" style={{ color: "var(--marigold)" }}>
-            Optional — Step 2
+            Optional - Step 2
           </p>
           <h2 className="font-display mt-1.5 text-xl font-bold" style={{ color: "var(--ink)" }}>
             Add documents for sharper, compliance-aware results
           </h2>
           <p className="mt-2 text-sm leading-6" style={{ color: "var(--sage)" }}>
             Your dashboard already works with just Zoho connected. These documents let the system
-            catch things Zoho alone can't see — skip any of them, or all of them, and add them later.
+            catch things Zoho alone can't see - skip any of them, or all of them, and add them later.
           </p>
         </div>
         <div className="shrink-0 text-right">
@@ -156,7 +156,7 @@ export default function DocumentUploadStep({ onSkip }: { onSkip?: () => void }) 
                   background: "white",
                 }}
               >
-                {slot.status === "uploading" ? "Uploading…" : slot.status === "error" ? "Try again" : "Upload"}
+                {slot.status === "uploading" ? "Uploading..." : slot.status === "error" ? "Try again" : "Upload"}
               </button>
             )}
             <input
@@ -180,7 +180,7 @@ export default function DocumentUploadStep({ onSkip }: { onSkip?: () => void }) 
           className="mt-5 text-xs font-semibold underline underline-offset-2"
           style={{ color: "var(--sage)" }}
         >
-          Skip for now — I'll add these later
+          Skip for now - I'll add these later
         </button>
       ) : null}
     </div>

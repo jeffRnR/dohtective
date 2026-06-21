@@ -35,7 +35,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   try {
     const { business, session, membership } = await requireBusinessMember(slug);
 
-    // Only founders can add members — an accountant shouldn't be able to
+    // Only founders can add members - an accountant shouldn't be able to
     // grant themselves or others broader access than the founder intended.
     if (membership.role !== "founder") {
       return NextResponse.json(
@@ -54,7 +54,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       return NextResponse.json({ error: "Invalid role." }, { status: 400 });
     }
 
-    // If a user with this email already exists, add them directly —
+    // If a user with this email already exists, add them directly -
     // no need for an invite-then-accept dance if the account is already
     // there. Otherwise, create a pending BusinessInvite that gets
     // resolved the next time someone signs up/in with that email (that
@@ -79,7 +79,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       create: { businessId: business.id, email, role: role as never, invitedById: session.user!.id! },
     });
 
-    // Structure only — see lib/invites.ts. The invite row is real and
+    // Structure only - see lib/invites.ts. The invite row is real and
     // will resolve into real access once that person signs up/in with
     // this email; the email notification itself is a stub for now.
     const emailResult = await sendInviteEmail({

@@ -83,7 +83,7 @@ export default function ActionPlan({ items, slug }: { items: FollowupWorkflowIte
         className="font-display mt-5 w-full rounded-[var(--radius-md)] px-5 py-3 text-sm font-bold uppercase tracking-[0.06em] text-white transition"
         style={{ background: "var(--ink)" }}
       >
-        Push this list to Google Sheets →
+        Push this list to Google Sheets &rarr;
       </button>
     </div>
   );

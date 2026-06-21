@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 const DETECTION_SERVICE_URL = process.env.DETECTION_SERVICE_URL ?? "http://localhost:8123";
 
 // CHANGELOG: DocumentUploadStep previously called python-service directly
-// from the browser via NEXT_PUBLIC_DETECTION_SERVICE_URL — inconsistent
+// from the browser via NEXT_PUBLIC_DETECTION_SERVICE_URL - inconsistent
 // with /api/report's pattern (browser -> Next.js -> Python) and it meant
 // the Python service URL had to be public. This route restores that
 // consistency: browser uploads here, this route forwards to Python

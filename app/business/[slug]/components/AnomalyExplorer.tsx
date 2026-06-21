@@ -37,7 +37,7 @@ export default function AnomalyExplorer({ anomalies }: { anomalies: AnomalyTrans
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold" style={{ color: "var(--ink)" }}>{a.anomaly_type}</p>
                     <p className="text-xs" style={{ color: "var(--sage)" }}>
-                      KES {a.amount.toLocaleString()} · {a.date}
+                      KES {a.amount.toLocaleString()} - {a.date}
                     </p>
                   </div>
                   <svg

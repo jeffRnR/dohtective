@@ -14,6 +14,13 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
 
+// CHANGELOG: process.env.GOOGLE_CLIENT_ID/SECRET are typed string | undefined
+// by TypeScript - NextAuth's Google() provider requires string. Rather than
+// a silent `!` assertion that would compile but crash confusingly at
+// runtime if the env var is genuinely missing, fail loudly and early with
+// a clear message pointing at .env.local - same honesty pattern used
+// throughout this project for missing configuration (see assertZohoConfigured
+// in app/lib/zoho-client.ts).
 function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -24,7 +31,7 @@ function requireEnv(name: string): string {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt" }, // required for Credentials provider - database sessions don't support it directly
   pages: {
     signIn: "/sign-in",
   },
@@ -45,7 +52,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!email || !password) return null;
 
         const user = await prisma.user.findUnique({ where: { email } });
-        if (!user || !user.passwordHash) return null;
+        if (!user || !user.passwordHash) return null; // no password set = Google-only account
 
         const valid = await bcrypt.compare(password, user.passwordHash);
         if (!valid) return null;
@@ -67,6 +74,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   events: {
+    // Fires once, when the Prisma adapter creates a brand-new User row -
+    // this is the Google sign-in equivalent of the invite-resolution
+    // logic in app/api/auth/signup/route.ts (which only covers the
+    // Credentials/password path). Without this, someone invited by email
+    // who then signs in with Google would never get their membership
+    // activated.
     async createUser({ user }) {
       if (!user.email || !user.id) return;
       const pendingInvites = await prisma.businessInvite.findMany({

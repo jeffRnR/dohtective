@@ -2,5 +2,5 @@
 import Loader from "../../../frontend/components/Loader";
 
 export default function Loading() {
-  return <Loader fullPage label="Loading documents…" />;
+  return <Loader fullPage label="Loading documents..." />;
 }

@@ -2,12 +2,12 @@
 import { NextResponse } from "next/server";
 import { buildAuthorizationUrl, assertZohoConfigured } from "../../../../lib/zoho-client";
 
-// CHANGELOG: this is the route that was missing entirely — there was no
+// CHANGELOG: this is the route that was missing entirely - there was no
 // real "connect to Zoho" action anywhere, only a mock data file read.
 // This route kicks off the actual OAuth redirect-and-consent flow.
 //
 // The business slug is passed through Zoho's `state` parameter, which
-// Zoho echoes back unmodified to the callback URL — this is the standard
+// Zoho echoes back unmodified to the callback URL - this is the standard
 // way to carry context through an OAuth redirect without a server-side
 // session, and it's how the callback route knows WHICH business this
 // connection belongs to.

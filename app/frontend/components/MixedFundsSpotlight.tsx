@@ -13,7 +13,7 @@ export default function MixedFundsSpotlight({ report }: { report: ReportData | n
         </p>
         <p className="mt-0.5 text-sm" style={{ color: "var(--sage)" }}>
           {report.mixed_funds_count} payment{report.mixed_funds_count === 1 ? "" : "s"}, KES{" "}
-          {report.mixed_funds_total.toLocaleString()} — worth asking your bookkeeper about.
+          {report.mixed_funds_total.toLocaleString()} - worth asking your bookkeeper about.
         </p>
       </div>
     </div>

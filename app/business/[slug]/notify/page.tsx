@@ -52,7 +52,7 @@ export default function NotifyPage() {
   }
 
   if (loading) {
-    return <Loader fullPage label="Loading…" />;
+    return <Loader fullPage label="Loading..." />;
   }
 
   const notConfigured = status && (!status.configured || !status.serviceReachable);
@@ -67,7 +67,7 @@ export default function NotifyPage() {
           Push this report to Google Sheets
         </h1>
         <p className="mt-2 text-sm leading-6" style={{ color: "var(--sage)" }}>
-          Writes an action list — sorted by priority, each item assigned to the founder or accountant —
+          Writes an action list - sorted by priority, each item assigned to the founder or accountant -
           plus a transaction-detail tab, into your connected Google Sheet.
         </p>
 
@@ -79,7 +79,7 @@ export default function NotifyPage() {
             <p className="mt-1 text-xs leading-5" style={{ color: "var(--ink)" }}>
               {!status?.serviceReachable
                 ? "Make sure the Python FastAPI service is running."
-                : "A service account needs to be configured on the backend before this will work — see sheets_dashboard.py for setup steps. This isn't a bug, it's an honest 'not configured yet' state."}
+                : "A service account needs to be configured on the backend before this will work - see sheets_dashboard.py for setup steps. This isn't a bug, it's an honest 'not configured yet' state."}
             </p>
           </div>
         ) : null}
@@ -103,7 +103,7 @@ export default function NotifyPage() {
               className="mt-3 inline-block text-sm font-semibold underline underline-offset-2"
               style={{ color: "var(--savanna)" }}
             >
-              Open the sheet →
+              Open the sheet &rarr;
             </a>
           </div>
         ) : (
@@ -120,7 +120,7 @@ export default function NotifyPage() {
                     <circle cx="12" cy="12" r="9.5" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5" />
                     <path d="M12 2.5a9.5 9.5 0 0 1 9.5 9.5" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
                   </svg>
-                  Pushing…
+                  Pushing...
                 </>
               ) : (
                 "Push to Google Sheets"

@@ -20,13 +20,13 @@ export default function AvalancheTrustStrip() {
           Flags you can't quietly delete
         </h3>
         <p className="mt-2 text-sm leading-6" style={{ color: "var(--ink)" }}>
-          Every flag this system raises will be hashed and anchored on Avalanche — so the record
+          Every flag this system raises will be hashed and anchored on Avalanche - so the record
           of when something was caught can't be backdated or erased later, by us or anyone else.
         </p>
       </div>
       <div className="mt-5 flex items-center gap-2 font-mono text-[11px]" style={{ color: "var(--avax-violet)" }}>
         <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--avax-violet)" }} />
-        Avalanche Fuji testnet — anchoring not yet active
+        Avalanche Fuji testnet - anchoring not yet active
       </div>
     </div>
   );

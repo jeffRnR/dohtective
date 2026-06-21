@@ -47,7 +47,7 @@ export default function SelectOrgPage() {
     }
   }
 
-  if (loading) return <Loader fullPage label="Loading your Zoho organizations…" />;
+  if (loading) return <Loader fullPage label="Loading your Zoho organizations..." />;
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bone)" }}>
@@ -57,7 +57,7 @@ export default function SelectOrgPage() {
         </h1>
         <p className="mt-2 text-sm leading-6" style={{ color: "var(--sage)" }}>
           Your Zoho account has more than one Books organization. Pick the one that matches
-          this business — you can connect a different one later from settings.
+          this business - you can connect a different one later from settings.
         </p>
 
         {error ? (

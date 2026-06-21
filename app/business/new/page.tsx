@@ -47,7 +47,7 @@ export default function NewBusinessPage() {
           className="text-xs font-semibold uppercase tracking-[0.08em]"
           style={{ color: "var(--sage)" }}
         >
-          ← Back
+          &larr; Back
         </button>
 
         <h1 className="font-display mt-4 text-2xl font-bold" style={{ color: "var(--ink)" }}>
@@ -55,7 +55,7 @@ export default function NewBusinessPage() {
         </h1>
         <p className="mt-2 text-sm leading-6" style={{ color: "var(--sage)" }}>
           This creates an empty business profile you can immediately see on a dashboard.
-          No fake numbers — it starts at zero until real data comes in.
+          No fake numbers - it starts at zero until real data comes in.
         </p>
 
         <div className="mt-6 rounded-[var(--radius-lg)] border p-6" style={{ borderColor: "var(--line)", background: "white" }}>
@@ -106,7 +106,7 @@ export default function NewBusinessPage() {
               {submitting ? (
                 <>
                   <Loader size="sm" />
-                  Creating…
+                  Creating...
                 </>
               ) : (
                 "Create business"
@@ -121,10 +121,10 @@ export default function NewBusinessPage() {
         >
           <p className="text-xs leading-5" style={{ color: "var(--sage)" }}>
             <span className="font-semibold" style={{ color: "var(--ink)" }}>What happens next: </span>
-            you'll land on this business's dashboard right away — it'll show zero transactions
+            you'll land on this business's dashboard right away - it'll show zero transactions
             until real data flows in. From there you can optionally add supporting documents
             (KRA PIN, bank statement, etc.) for sharper detection. A real Zoho Books connection
-            isn't live yet — see the honesty note in the project docs.
+            isn't live yet - see the honesty note in the project docs.
           </p>
         </div>
       </main>

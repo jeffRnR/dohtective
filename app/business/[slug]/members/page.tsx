@@ -67,7 +67,7 @@ export default function MembersPage() {
       if (data.status === "invited") {
         setAddNote(
           `${email} doesn't have an account yet. They'll automatically get access the moment ` +
-          `they sign up with this exact email. ${!data.emailSent ? "(No invite email sent yet — that's not built yet, see project notes.)" : ""}`
+          `they sign up with this exact email. ${!data.emailSent ? "(No invite email sent yet - that's not built yet, see project notes.)" : ""}`
         );
       } else {
         setAddNote(`${email} now has access as ${role}.`);
@@ -81,7 +81,7 @@ export default function MembersPage() {
     }
   }
 
-  if (loading) return <Loader fullPage label="Loading members…" />;
+  if (loading) return <Loader fullPage label="Loading members..." />;
 
   if (error) {
     return (
@@ -92,7 +92,7 @@ export default function MembersPage() {
   }
 
   // Mirrors the server's own check in app/api/businesses/[slug]/members/route.ts
-  // — only a founder can add members. Using the API's reported myRole
+  // - only a founder can add members. Using the API's reported myRole
   // directly, not inferring it from the member list (which was a real
   // bug in an earlier version of this file: checking "does ANY member
   // have role founder" instead of "is the CURRENT user a founder").
@@ -103,7 +103,7 @@ export default function MembersPage() {
       <div className="rounded-[var(--radius-lg)] border p-6" style={{ borderColor: "var(--line)", background: "white" }}>
         <h2 className="font-display text-lg font-bold" style={{ color: "var(--ink)" }}>Who has access</h2>
         <p className="mt-1 text-sm" style={{ color: "var(--sage)" }}>
-          Only people listed here can see this business — nobody else, even if signed in.
+          Only people listed here can see this business - nobody else, even if signed in.
         </p>
 
         <div className="mt-4 space-y-2">
@@ -122,13 +122,13 @@ export default function MembersPage() {
 
         {pendingInvites.length > 0 ? (
           <div className="mt-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--marigold)" }}>Pending — not signed up yet</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--marigold)" }}>Pending - not signed up yet</p>
             <div className="mt-2 space-y-2">
               {pendingInvites.map((inv) => (
                 <div key={inv.id} className="flex items-center justify-between rounded-[var(--radius-md)] border border-dashed p-3" style={{ borderColor: "var(--line)" }}>
                   <p className="text-sm" style={{ color: "var(--ink)" }}>{inv.email}</p>
                   <span className="rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]" style={{ background: "var(--marigold-dim)", color: "var(--marigold)" }}>
-                    {inv.role} · pending
+                    {inv.role} - pending
                   </span>
                 </div>
               ))}
@@ -142,7 +142,7 @@ export default function MembersPage() {
           <h2 className="font-display text-lg font-bold" style={{ color: "var(--ink)" }}>Add someone</h2>
           <p className="mt-1 text-sm leading-6" style={{ color: "var(--sage)" }}>
             Add your accountant or anyone else who should see this business. If they don't have an
-            account yet, they'll get access automatically the moment they sign up with this email —
+            account yet, they'll get access automatically the moment they sign up with this email -
             no invite email is sent yet, this just reserves their access.
           </p>
 
@@ -172,7 +172,7 @@ export default function MembersPage() {
               className="font-display rounded-[var(--radius-md)] px-5 py-2.5 text-sm font-bold uppercase tracking-[0.06em] text-white transition disabled:cursor-not-allowed"
               style={{ background: adding ? "var(--sage)" : "var(--savanna)" }}
             >
-              {adding ? "Adding…" : "Add"}
+              {adding ? "Adding..." : "Add"}
             </button>
           </form>
 

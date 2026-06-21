@@ -37,7 +37,7 @@ export default function ZohoConnectBanner({ slug }: { slug: string }) {
   }
 
   if (status === "checking" || status === "connected") {
-    // Once connected, this banner gets out of the way entirely — no
+    // Once connected, this banner gets out of the way entirely - no
     // persistent "you're connected!" chrome cluttering the dashboard
     // every visit. The one-time success message (if just redirected
     // back) is shown below, separately, and self-dismisses.
@@ -60,7 +60,7 @@ export default function ZohoConnectBanner({ slug }: { slug: string }) {
         Connect this business's real Zoho Books account
       </h2>
       <p className="mt-2 text-sm leading-6" style={{ color: "var(--sage)" }}>
-        One click, redirects to Zoho's real sign-in and consent screen — Dohtective never sees
+        One click, redirects to Zoho's real sign-in and consent screen - Dohtective never sees
         your Zoho password, only the data you approve sharing.
       </p>
 
@@ -76,7 +76,7 @@ export default function ZohoConnectBanner({ slug }: { slug: string }) {
           className="font-display mt-4 inline-block rounded-[var(--radius-md)] px-5 py-3 text-sm font-bold uppercase tracking-[0.06em] text-white transition"
           style={{ background: "var(--savanna)" }}
         >
-          Finish choosing an organization →
+          Finish choosing an organization &rarr;
         </a>
       ) : (
         <a
@@ -84,7 +84,7 @@ export default function ZohoConnectBanner({ slug }: { slug: string }) {
           className="font-display mt-4 inline-block rounded-[var(--radius-md)] px-5 py-3 text-sm font-bold uppercase tracking-[0.06em] text-white transition"
           style={{ background: "var(--savanna)" }}
         >
-          Connect Zoho Books →
+          Connect Zoho Books &rarr;
         </a>
       )}
     </div>

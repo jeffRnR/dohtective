@@ -39,23 +39,6 @@ export type ZohoBankStatement = {
   notes: string;
 };
 
-export type ZohoAnomaly = {
-  transaction_id: string;
-  anomaly_type: string;
-  reason: string;
-  date: string;
-  branch: string;
-  amount: number;
-  description: string;
-  contact_name: string;
-  category_name: string;
-  account_name: string;
-  status: string;
-  is_reconciled: boolean;
-  payment_method: string;
-  reference_number: string;
-};
-
 export type ZohoReport = {
   cash_buffer_days: number;
   total_cash_outflows: number;
@@ -64,7 +47,7 @@ export type ZohoReport = {
     title: string;
     detail: string;
     severity: "high" | "medium" | "low";
-    // Optional — only the mixed-funds flag sets these for now. Plain-language
+    // Optional - only the mixed-funds flag sets these for now. Plain-language
     // label is what actually renders to a non-technical SME owner; "confidence"
     // itself is kept for any future internal/debug use, not meant for display.
     confidence?: "high" | "medium" | "low";
@@ -75,14 +58,13 @@ export type ZohoReport = {
   plain_language: string[];
   followup_workflow: Array<{ title: string; action: string; role: "founder" | "accountant" | "reviewer" }>;
   missing_information_checklist: string[];
-  anomaly_transactions: ZohoAnomaly[];
 };
 
 const parseDate = (value: string) => new Date(value);
 
 // Categories that are EXPECTED to be round numbers as a matter of course.
 // Section 3.3 of the build plan: rent and payroll are round by design in
-// this market — flagging them as "suspicious round numbers" is exactly the
+// this market - flagging them as "suspicious round numbers" is exactly the
 // false-positive trap a Kenyan-context judge will catch immediately.
 const RECURRING_ROUND_CATEGORIES = new Set(["Rent", "Payroll"]);
 
@@ -94,8 +76,8 @@ export function detectMixedFunds(transactions: ZohoTransaction[]) {
     const matched = personalPatterns.some((pattern) => lower.includes(pattern));
     if (!matched) return null;
 
-    // Confidence tiering (Section 3.2): a structural signal — the account
-    // itself being "Owner Draw" / unreconciled — is much stronger evidence
+    // Confidence tiering (Section 3.2): a structural signal - the account
+    // itself being "Owner Draw" / unreconciled - is much stronger evidence
     // than a loose text match on description alone. Don't flatten these
     // into one bucket; a founder needs to know what to glance at vs. what
     // actually needs an accountant.
@@ -124,7 +106,7 @@ export function detectMixedFunds(transactions: ZohoTransaction[]) {
 }
 
 export function detectDuplicateTransactions(transactions: ZohoTransaction[]) {
-  // Grouped pass instead of O(n²) pairwise scan — same semantics, fewer
+  // Grouped pass instead of O(n^2) pairwise scan - same semantics, fewer
   // comparisons. Group by (contact, amount, branch, type), since a true
   // duplicate-payment pair always shares all four.
   const groups = new Map<string, ZohoTransaction[]>();
@@ -146,7 +128,7 @@ export function detectDuplicateTransactions(transactions: ZohoTransaction[]) {
     // get flagged every single time. If this exact (contact, amount) pair
     // recurs MORE than twice across the whole dataset with a roughly
     // consistent gap between occurrences, treat it as an established
-    // recurring pattern, not a duplicate-entry anomaly — only flag the
+    // recurring pattern, not a duplicate-entry anomaly - only flag the
     // first unexpected repeat, not the steady-state cadence.
     const gaps: number[] = [];
     for (let i = 1; i < sorted.length; i += 1) {
@@ -182,7 +164,7 @@ export function detectRoundNumberPayments(transactions: ZohoTransaction[]) {
     if (tx.amount < 50000 || tx.amount % 10000 !== 0) continue;
 
     // Section 3.3: don't flag round numbers alone. Rent/payroll are round
-    // by design in this market — exclude categories that are expected to
+    // by design in this market - exclude categories that are expected to
     // be round and recurring on their own terms.
     if (RECURRING_ROUND_CATEGORIES.has(tx.category_name)) continue;
 
@@ -273,7 +255,7 @@ export function buildReport(
   // Roll up mixed-funds confidence to one dataset-level value: highest
   // confidence among matched transactions wins. If even one transaction is
   // high-confidence (owner-draw account + unreconciled), the founder should
-  // see "high" — averaging it down to "medium" would bury the strongest
+  // see "high" - averaging it down to "medium" would bury the strongest
   // signal in the noise of weaker text-only matches.
   const mixedConfidenceRank = { high: 3, medium: 2, low: 1 } as const;
   const mixedConfidence = mixed.scored.reduce<"high" | "medium" | "low" | null>((best, s) => {
@@ -289,7 +271,7 @@ export function buildReport(
     mixedConfidence === "high" ? "high" : mixedConfidence === "medium" ? "medium" : "low";
   const mixedConfidenceLabel =
     mixedConfidence === "high"
-      ? "We're quite sure — act on this now"
+      ? "We're quite sure - act on this now"
       : mixedConfidence === "medium"
       ? "Worth a look when you get a chance"
       : "Probably nothing, just flagging it";
@@ -326,49 +308,6 @@ export function buildReport(
       ? [{ title: "Cash buffer is tight", detail: `Estimated cash buffer is ${buffer.bufferDays} days, below the early-warning threshold.`, severity: "high" as const }]
       : []),
   ];
-
-  const anomalyMap = new Map<
-    string,
-    {
-      transaction_id: string;
-      anomaly_types: string[];
-      reasons: string[];
-      tx: ZohoTransaction;
-    }
-  >();
-
-  const addAnomaly = (tx: ZohoTransaction, type: string, reason: string) => {
-    const existing = anomalyMap.get(tx.transaction_id);
-    if (existing) {
-      if (!existing.anomaly_types.includes(type)) existing.anomaly_types.push(type);
-      if (!existing.reasons.includes(reason)) existing.reasons.push(reason);
-    } else {
-      anomalyMap.set(tx.transaction_id, { transaction_id: tx.transaction_id, anomaly_types: [type], reasons: [reason], tx });
-    }
-  };
-
-  mixed.items.forEach((tx) => addAnomaly(tx, "Mixed funds", "Possible personal or owner spending mixed with business expenses."));
-  duplicates.forEach((tx) => addAnomaly(tx, "Duplicate transaction", "Potential duplicate supplier payment within 5 days."));
-  rounds.forEach((tx) => addAnomaly(tx, "Round-number payment", "Large round-number expense to an unfamiliar recipient."));
-  unusual.forEach((tx) => addAnomaly(tx, "Unusual transaction", "One-off or unusually large expense description detected."));
-  unreconciled.forEach((tx) => addAnomaly(tx, "Unreconciled entry", "Transaction not marked as reconciled in the books."));
-
-  const anomaly_transactions = Array.from(anomalyMap.values()).map((entry) => ({
-    transaction_id: entry.transaction_id,
-    anomaly_type: entry.anomaly_types.join(", "),
-    reason: entry.reasons.join(" / "),
-    date: entry.tx.date,
-    branch: entry.tx.branch,
-    amount: entry.tx.amount,
-    description: entry.tx.description,
-    contact_name: entry.tx.contact_name,
-    category_name: entry.tx.category_name,
-    account_name: entry.tx.account_name,
-    status: entry.tx.status,
-    is_reconciled: entry.tx.is_reconciled,
-    payment_method: entry.tx.payment_method,
-    reference_number: entry.tx.reference_number,
-  }));
 
   const checklist = [
     unreconciled.length > 0 ? "Review unreconciled transactions and match them to bank statements." : "All transactions appear reconciled.",

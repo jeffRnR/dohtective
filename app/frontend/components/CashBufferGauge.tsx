@@ -22,7 +22,7 @@ const STATUS_CONFIG: Record<Status, { color: string; dim: string; label: string;
     color: "var(--marigold)",
     dim: "var(--marigold-dim)",
     label: "Worth watching",
-    sentence: (d) => `You have ${d} days of buffer left — start lining up what's coming in next.`,
+    sentence: (d) => `You have ${d} days of buffer left - start lining up what's coming in next.`,
   },
   urgent: {
     color: "var(--clay)",
@@ -43,7 +43,7 @@ export default function CashBufferGauge({ days }: { days: number | null }) {
   const cfg = STATUS_CONFIG[status];
   const [displayed, setDisplayed] = useState(0);
 
-  // Odometer-style count-up — the one orchestrated motion moment on the page.
+  // Odometer-style count-up - the one orchestrated motion moment on the page.
   useEffect(() => {
     if (days === null) {
       setDisplayed(0);
@@ -62,7 +62,7 @@ export default function CashBufferGauge({ days }: { days: number | null }) {
     return () => cancelAnimationFrame(frame);
   }, [days]);
 
-  // Arc gauge geometry — semicircle, fill proportional to a 0–45 day scale (45d ≈ full).
+  // Arc gauge geometry - semicircle, fill proportional to a 0-45 day scale (45d ~ full).
   const pct = days === null ? 0 : Math.max(0, Math.min(1, days / 45));
   const r = 80;
   const circumference = Math.PI * r;
@@ -92,7 +92,7 @@ export default function CashBufferGauge({ days }: { days: number | null }) {
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-end pb-1">
           <span className="font-display text-[44px] font-bold leading-none tabular-nums" style={{ color: cfg.color }}>
-            {days === null ? "—" : displayed}
+            {days === null ? "-" : displayed}
           </span>
           <span className="mt-1 text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--sage)" }}>
             days of buffer

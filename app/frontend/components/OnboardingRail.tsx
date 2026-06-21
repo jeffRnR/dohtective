@@ -6,11 +6,11 @@ type Props = {
   onConnect: () => void;
 };
 
-// PLACEHOLDER CONTENT — Section 1 of the build plan: this checklist has not
+// PLACEHOLDER CONTENT - Section 1 of the build plan: this checklist has not
 // been validated against a real bookkeeper or SME owner yet. Treat every
 // line here as EDITABLE. Replace with the real prerequisites once a
 // stakeholder conversation confirms what's actually needed before
-// onboarding — do not let this silently become load-bearing truth.
+// onboarding - do not let this silently become load-bearing truth.
 const PREREQUISITES = [
   {
     title: "An active Zoho Books account",
@@ -18,7 +18,7 @@ const PREREQUISITES = [
   },
   {
     title: "One person who owns the books",
-    detail: "Whoever reconciles transactions today — founder, bookkeeper, or accountant.",
+    detail: "Whoever reconciles transactions today - founder, bookkeeper, or accountant.",
   },
   {
     title: "A sense of your normal month",
@@ -40,7 +40,7 @@ export default function OnboardingRail({ connected, loading, onConnect }: Props)
             </svg>
           </span>
           <span className="text-sm font-semibold" style={{ color: "var(--savanna)" }}>
-            Books connected — reviewing your transactions
+            Books connected - reviewing your transactions
           </span>
         </div>
       </div>
@@ -58,7 +58,7 @@ export default function OnboardingRail({ connected, loading, onConnect }: Props)
             Why connect your books, and what you'll need
           </h2>
           <p className="mt-2 text-sm leading-6" style={{ color: "var(--sage)" }}>
-            Dohtective reads your Zoho Books data to catch problems while they're still small —
+            Dohtective reads your Zoho Books data to catch problems while they're still small -
             mixed personal spending, duplicate payments, a cash crunch before it bites. Nothing is
             shared, and nothing changes in your books. Here's what helps before you start:
           </p>
@@ -69,7 +69,7 @@ export default function OnboardingRail({ connected, loading, onConnect }: Props)
           className="font-display shrink-0 rounded-[var(--radius-md)] px-6 py-3.5 text-sm font-bold uppercase tracking-[0.06em] text-white transition disabled:cursor-not-allowed"
           style={{ background: loading ? "var(--sage)" : "var(--savanna)" }}
         >
-          {loading ? "Connecting…" : "Connect Zoho Books"}
+          {loading ? "Connecting..." : "Connect Zoho Books"}
         </button>
       </div>
 
@@ -89,7 +89,7 @@ export default function OnboardingRail({ connected, loading, onConnect }: Props)
         ))}
       </div>
       <p className="mt-4 text-[11px] italic" style={{ color: "var(--sage)" }}>
-        Placeholder checklist — to be confirmed with a real bookkeeper or SME owner before launch.
+        Placeholder checklist - to be confirmed with a real bookkeeper or SME owner before launch.
       </p>
     </div>
   );

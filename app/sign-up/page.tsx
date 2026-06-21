@@ -28,7 +28,7 @@ export default function SignUpPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not create your account.");
 
-      // Sign in immediately after sign-up — no separate "check your
+      // Sign in immediately after sign-up - no separate "check your
       // email to verify" step exists yet, matching the "structure that
       // works, not everything built" scope from earlier in this build.
       const result = await signIn("credentials", { email, password, redirect: false });
