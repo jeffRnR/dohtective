@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "company_name": "Kuzma wears",
+    "period_start": "2026-06-20",
+    "period_end": "2026-06-20",
+    "branches": [
+      "Main"
+    ],
+    "currency": "KES"
+  },
+  "transactions": [],
+  "invoices": [],
+  "bank_statements": [],
+  "supporting_documents": [],
+  "business_billers": []
+}

@@ -12,5 +12,12 @@
     "data_file": "zoho-books-mbali-bistro-collective.json",
     "csv_file": "zoho-books-mbali-bistro-collective.csv",
     "branch_count": 3
+  },
+  {
+    "slug": "kuzma-wears",
+    "company_name": "Kuzma wears",
+    "data_file": "zoho-books-kuzma-wears.json",
+    "csv_file": "zoho-books-kuzma-wears.csv",
+    "branch_count": 1
   }
 ]
