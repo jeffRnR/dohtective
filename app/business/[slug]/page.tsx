@@ -64,7 +64,7 @@ export default function BusinessDashboard() {
     return (
       <div className="space-y-5">
         <ZohoConnectBanner slug={slug} />
-        <VerdictBand report={data.report} />
+        <VerdictBand report={data.report} trend={data.trend} />
         <div className="rounded-[var(--radius-lg)] border p-6 sm:p-8 text-center" style={{ borderColor: "var(--line)", background: "white" }}>
           <p className="font-display text-lg font-bold" style={{ color: "var(--ink)" }}>
             No transactions yet
@@ -88,7 +88,7 @@ export default function BusinessDashboard() {
   return (
     <div className="space-y-5">
       <ZohoConnectBanner slug={slug} />
-      <VerdictBand report={data.report} />
+      <VerdictBand report={data.report} trend={data.trend} />
       <MixedFundsSpotlight report={data.report} />
       <FlagFeed flags={sortedFlags} initialVisibleCount={3} title="What needs your eyes" />
       <ActionPlan items={data.report.followup_workflow} slug={slug} />

@@ -1,5 +1,5 @@
 // app/frontend/components/LandingNav.tsx
-export default function LandingNav() {
+export default function LandingNav({ isSignedIn = false }: { isSignedIn?: boolean }) {
   return (
     <header className="border-b" style={{ borderColor: "var(--line)" }}>
       <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
@@ -17,16 +17,28 @@ export default function LandingNav() {
           <a href="/pricing" className="hidden text-sm font-semibold sm:block" style={{ color: "var(--sage)" }}>
             Pricing
           </a>
-          <a href="/sign-in" className="text-sm font-semibold" style={{ color: "var(--sage)" }}>
-            Sign in
-          </a>
-          <a
-            href="/sign-up"
-            className="font-display rounded-[var(--radius-sm)] px-4 py-2 text-xs font-bold uppercase tracking-[0.06em] text-white transition"
-            style={{ background: "var(--savanna)" }}
-          >
-            Get started
-          </a>
+          {isSignedIn ? (
+            <a
+              href="/businesses"
+              className="font-display rounded-[var(--radius-sm)] px-4 py-2 text-xs font-bold uppercase tracking-[0.06em] text-white transition"
+              style={{ background: "var(--savanna)" }}
+            >
+              My businesses
+            </a>
+          ) : (
+            <>
+              <a href="/sign-in" className="text-sm font-semibold" style={{ color: "var(--sage)" }}>
+                Sign in
+              </a>
+              <a
+                href="/sign-up"
+                className="font-display rounded-[var(--radius-sm)] px-4 py-2 text-xs font-bold uppercase tracking-[0.06em] text-white transition"
+                style={{ background: "var(--savanna)" }}
+              >
+                Get started
+              </a>
+            </>
+          )}
         </nav>
       </div>
     </header>

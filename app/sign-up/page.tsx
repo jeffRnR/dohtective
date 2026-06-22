@@ -33,7 +33,7 @@ export default function SignUpPage() {
       // works, not everything built" scope from earlier in this build.
       const result = await signIn("credentials", { email, password, redirect: false });
       if (result?.error) throw new Error("Account created, but sign-in failed. Try signing in manually.");
-      router.push("/");
+      router.push("/businesses");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
       setSubmitting(false);
@@ -54,7 +54,7 @@ export default function SignUpPage() {
         </p>
 
         <button
-          onClick={() => signIn("google", { callbackUrl: "/" })}
+          onClick={() => signIn("google", { callbackUrl: "/businesses" })}
           className="font-display mt-6 flex w-full items-center justify-center gap-2.5 rounded-[var(--radius-md)] border px-5 py-3 text-sm font-bold transition hover:border-[var(--savanna)]"
           style={{ borderColor: "var(--line)", color: "var(--ink)", background: "white" }}
         >

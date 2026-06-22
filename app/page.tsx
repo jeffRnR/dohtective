@@ -1,36 +1,28 @@
 // app/page.tsx
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import "./frontend/styles/tokens.css";
-import Loader from "./frontend/components/Loader";
 import LandingNav from "./frontend/components/LandingNav";
 import LandingFooter from "./frontend/components/LandingFooter";
 import AvalancheTrustStrip from "./frontend/components/AvalancheTrustStrip";
 
 export default function Home() {
-  const router = useRouter();
+  // CHANGELOG: this page used to force-redirect any authenticated visitor
+  // straight to /businesses, with no way back to the landing page short
+  // of signing out. That's a real dead end -- a signed-in person should
+  // still be able to see pricing, the "how it works" section, or just
+  // get back to a stable home URL. Fix: render normally for everyone;
+  // only the CTAs and nav adapt based on session state (see
+  // LandingNav / the hero buttons below). The actual post-login
+  // destination is now set directly in sign-in/sign-up (both push to
+  // /businesses on success), not enforced here.
   const { status } = useSession();
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      router.push("/businesses");
-    }
-  }, [status, router]);
-
-  if (status === "loading" || status === "authenticated") {
-    return (
-      <div className="flex min-h-screen items-center justify-center" style={{ background: "var(--bone)" }}>
-        <Loader size="lg" />
-      </div>
-    );
-  }
+  const isSignedIn = status === "authenticated";
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bone)" }}>
-      <LandingNav />
+      <LandingNav isSignedIn={isSignedIn} />
 
       <main className="mx-auto max-w-6xl px-5 sm:px-8">
         <section className="grid gap-10 py-16 sm:py-24 lg:grid-cols-[1.2fr_1fr] lg:items-center">
@@ -49,11 +41,11 @@ export default function Home() {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <a
-                href="/sign-up"
+                href={isSignedIn ? "/businesses" : "/sign-up"}
                 className="font-display rounded-[var(--radius-md)] px-6 py-3.5 text-sm font-bold uppercase tracking-[0.06em] text-white transition"
                 style={{ background: "var(--savanna)" }}
               >
-                Get started free &rarr;
+                {isSignedIn ? "Go to my businesses" : "Get started free"} &rarr;
               </a>
               <a
                 href="/pricing"
@@ -165,11 +157,11 @@ export default function Home() {
             Never surprise your investor with a problem this could have caught.
           </h2>
           <a
-            href="/sign-up"
+            href={isSignedIn ? "/businesses" : "/sign-up"}
             className="font-display mt-7 inline-block rounded-[var(--radius-md)] px-7 py-4 text-sm font-bold uppercase tracking-[0.06em] text-white transition"
             style={{ background: "var(--savanna)" }}
           >
-            Get started free &rarr;
+            {isSignedIn ? "Go to my businesses" : "Get started free"} &rarr;
           </a>
         </section>
       </main>

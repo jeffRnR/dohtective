@@ -107,6 +107,73 @@ export async function GET(req: Request) {
 
   const { report } = (await analyzeResponse.json()) as { report: Record<string, unknown> };
 
+  // ── Flag memory: save a monthly snapshot, compute trend vs last month ──
+  //
+  // Design decision: snapshot ONCE PER CALENDAR MONTH per business, not on
+  // every dashboard load. Saving on every GET would flood this table with
+  // near-duplicate rows (every page refresh = a new row) and make "last
+  // month" comparisons meaningless, since "last" would mean "five seconds
+  // ago." If a snapshot already exists for the current month, it's
+  // updated in place (the month's figures can still shift as more data
+  // comes in) rather than creating a second row for the same month.
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const existingThisMonth = await prisma.reportSnapshot.findFirst({
+    where: { businessId: business.id, generatedAt: { gte: monthStart } },
+    orderBy: { generatedAt: "desc" },
+  });
+
+  const snapshotData = {
+    cashBufferDays: report.cash_buffer_days as number,
+    cashBufferRiskLevel: report.cash_buffer_risk_level as string,
+    totalCashInflows: report.total_cash_inflows as number,
+    totalCashOutflows: report.total_cash_outflows as number,
+    mixedFundsCount: report.mixed_funds_count as number,
+    mixedFundsTotal: report.mixed_funds_total as number,
+    flagsJson: report.flags as object,
+    plainLanguageJson: report.plain_language as object,
+  };
+
+  if (existingThisMonth) {
+    await prisma.reportSnapshot.update({
+      where: { id: existingThisMonth.id },
+      data: snapshotData,
+    });
+  } else if (report.cash_buffer_days !== undefined) {
+    // Only snapshot if the engine actually returned a real report (guards
+    // against persisting a snapshot for an empty/never-connected business
+    // -- see the isEmpty check on the dashboard page for the matching
+    // frontend behavior).
+    await prisma.reportSnapshot.create({
+      data: { businessId: business.id, ...snapshotData },
+    });
+  }
+
+  // Trend: most recent snapshot from a PRIOR month, not just "most
+  // recent snapshot" (which could be this month's row we just wrote).
+  const priorSnapshot = await prisma.reportSnapshot.findFirst({
+    where: { businessId: business.id, generatedAt: { lt: monthStart } },
+    orderBy: { generatedAt: "desc" },
+  });
+
+  const trend = priorSnapshot
+    ? {
+        available: true,
+        priorMonth: priorSnapshot.generatedAt.toISOString().slice(0, 7), // "YYYY-MM"
+        cashBufferDaysDelta: (report.cash_buffer_days as number) - priorSnapshot.cashBufferDays,
+        priorCashBufferDays: priorSnapshot.cashBufferDays,
+        mixedFundsCountDelta: (report.mixed_funds_count as number) - priorSnapshot.mixedFundsCount,
+        priorMixedFundsCount: priorSnapshot.mixedFundsCount,
+      }
+    : {
+        available: false,
+        // Explicit, honest reason rather than just omitting the field --
+        // a founder's first month should see "not enough history yet,"
+        // not a silently missing trend section.
+        reason: "Not enough history yet -- trends appear after your second month.",
+      };
+
   return NextResponse.json({
     meta: {
       company_name: business.companyName,
@@ -117,5 +184,6 @@ export async function GET(req: Request) {
     },
     transactions: shapedTransactions,
     report,
+    trend,
   });
 }

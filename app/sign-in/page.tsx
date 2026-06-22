@@ -24,7 +24,7 @@ export default function SignInPage() {
       setSubmitting(false);
       return;
     }
-    router.push("/");
+    router.push("/businesses");
   }
 
   return (
@@ -38,7 +38,7 @@ export default function SignInPage() {
         <h1 className="font-display mt-8 text-2xl font-bold" style={{ color: "var(--ink)" }}>Sign in</h1>
 
         <button
-          onClick={() => signIn("google", { callbackUrl: "/" })}
+          onClick={() => signIn("google", { callbackUrl: "/businesses" })}
           className="font-display mt-6 flex w-full items-center justify-center gap-2.5 rounded-[var(--radius-md)] border px-5 py-3 text-sm font-bold transition hover:border-[var(--savanna)]"
           style={{ borderColor: "var(--line)", color: "var(--ink)", background: "white" }}
         >

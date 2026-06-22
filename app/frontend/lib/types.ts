@@ -117,8 +117,29 @@ export type FrontendTransaction = {
   notes: string;
 };
 
+// CHANGELOG: trend added -- the foundation for "advisor, not just
+// detector." Either has real history to compare against (available:
+// true, with deltas vs the prior month) or is explicit about why not
+// (available: false, with a human-readable reason) -- never silently
+// absent, matching the honesty discipline used throughout this project
+// for any "not yet" state.
+export type ReportTrend =
+  | {
+      available: true;
+      priorMonth: string; // "YYYY-MM"
+      cashBufferDaysDelta: number;
+      priorCashBufferDays: number;
+      mixedFundsCountDelta: number;
+      priorMixedFundsCount: number;
+    }
+  | {
+      available: false;
+      reason: string;
+    };
+
 export type ZohoPayload = {
   meta: ZohoMeta;
   transactions: FrontendTransaction[];
   report: ReportData;
+  trend: ReportTrend;
 };

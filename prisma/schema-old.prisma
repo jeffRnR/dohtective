@@ -12,6 +12,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -84,46 +85,6 @@ enum BusinessRole {
   reviewer
 }
 
-// One row per business per analysis run. This is the foundation for
-// "advisor, not just detector" -- without persisted history, the system
-// can only describe a single point in time ("23 days of buffer") and can
-// never say "down from 31 last month," never know a flag already existed
-// and was addressed, never show a trend. Every other advisor-grade
-// feature (cross-flag synthesis, the founder feedback loop, trend-aware
-// risk scoring) depends on this existing first.
-//
-// Deliberately denormalized: cashBufferDays, flagsJson etc. are stored
-// as a snapshot of engine.py's output AT THE TIME OF THE RUN, not
-// references back to live Transaction rows. This is intentional -- a
-// trend needs to compare what the system SAID at each point in time,
-// which must stay stable even if transactions are later edited, deleted,
-// or reclassified. A snapshot that silently changed when underlying data
-// changed would make trend comparisons meaningless.
-model ReportSnapshot {
-  id         String   @id @default(cuid())
-  businessId String
-
-  cashBufferDays     Int
-  cashBufferRiskLevel String
-  totalCashInflows   Float
-  totalCashOutflows  Float
-  mixedFundsCount    Int
-  mixedFundsTotal    Float
-
-  // Full flags array and plain-language summary, stored as JSON so the
-  // snapshot is self-contained -- a year from now, this row alone (with
-  // no live transaction data) can still answer "what did we tell this
-  // founder in March."
-  flagsJson         Json
-  plainLanguageJson Json
-
-  generatedAt DateTime @default(now())
-
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-
-  @@index([businessId, generatedAt])
-}
-
 model Business {
   id          String  @id @default(cuid())
   slug        String  @unique
@@ -138,7 +99,6 @@ model Business {
   bankStatements BankStatement[]
   documents    SupportingDocument[]
   zohoConnection ZohoConnection?
-  reportSnapshots ReportSnapshot[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
