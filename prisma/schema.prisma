@@ -34,9 +34,10 @@ model User {
   memberships BusinessMember[]
   sentInvites BusinessInvite[] @relation("InvitedBy")
 
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  googleSheetsConnection GoogleSheetsConnection?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  //googleSheetsConnection GoogleSheetsConnection?
+  sheetsConnection GoogleSheetsConnection?
 }
 
 model Account {
