@@ -9,7 +9,7 @@ interface IERC20 {
 contract DohTectivePayments {
     address public owner;
     IERC20 public usdcToken;
-    
+
     event PremiumPaid(string indexed businessId, address indexed payer, uint256 amount, uint256 durationDays);
 
     constructor(address _usdcTokenAddress) {
