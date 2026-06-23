@@ -1,10 +1,8 @@
 """
 documents/schema.py
-Shared helpers for all four document extractors (receipt, bank statement,
-eTIMS, KRA/registration). Keeping amount/date parsing AND the core
-PDF-text/OCR extraction primitives in one place means a Kenyan-format fix,
-or a bug in how we fall back to OCR, only needs fixing once — not three or
-four times with three or four chances to drift.
+Shared helpers for all document extractors. 
+Optimized for speed: Uses pypdf for text-layer extraction to avoid 
+unnecessary OCR on digital PDFs.
 """
 
 from __future__ import annotations
@@ -13,14 +11,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-import pdfplumber
+from pypdf import PdfReader  # Faster text extraction
 from PIL import Image
 import pytesseract
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".tiff", ".bmp"}
 
-# Matches "KES 12,345.00", "Ksh 12,345", "12,345.00", "12345" — common
-# formats seen across Kenyan receipts, bank statements, and eTIMS records.
+# Matches "KES 12,345.00", "Ksh 12,345", "12,345.00", "12345"
 AMOUNT_PATTERN = re.compile(
     r"(?:KES|Ksh\.?|KSH)?\s*([\d]{1,3}(?:,\d{3})*(?:\.\d{1,2})?)",
     re.IGNORECASE,
@@ -33,12 +30,7 @@ DATE_PATTERNS = [
     ("%d %b %Y", re.compile(r"\b(\d{1,2} [A-Za-z]{3} \d{4})\b")),
 ]
 
-
 def extract_amount(text: str) -> Optional[float]:
-    """Best-effort amount extraction. Returns the LARGEST plausible amount
-    found, on the heuristic that a receipt/statement line's total is
-    usually the biggest number on the line (line-item quantities and unit
-    prices tend to be smaller than the line total)."""
     matches = AMOUNT_PATTERN.findall(text)
     if not matches:
         return None
@@ -50,9 +42,7 @@ def extract_amount(text: str) -> Optional[float]:
             continue
     return max(candidates) if candidates else None
 
-
 def extract_date(text: str) -> Optional[str]:
-    """Returns ISO format (YYYY-MM-DD) if a recognizable date is found."""
     for fmt, pattern in DATE_PATTERNS:
         match = pattern.search(text)
         if match:
@@ -63,47 +53,53 @@ def extract_date(text: str) -> Optional[str]:
                 continue
     return None
 
+# ── Optimized PDF/OCR Extraction ──
 
-# ── Shared PDF/OCR extraction primitives ──
-# Used by extract_receipt.py and extract_etims.py, which share the same
-# document shape (short, single/few-page, image-or-PDF). Bank statements
-# and KRA/registration docs have different enough needs (table extraction;
-# label-pattern matching on official certs) that they implement their own
-# variants rather than forcing a one-size-fits-all abstraction here.
-
-def extract_pdf_text_layer(path: Path) -> Optional[str]:
+def extract_pdf_text_layer(path: Path, max_pages: int = 5) -> Optional[str]:
+    """
+    Extracts text using pypdf. 
+    Optimization: Only reads the first 'max_pages' to ensure fast response times 
+    for large bank statements.
+    """
     try:
-        with pdfplumber.open(path) as pdf:
-            text = "\n".join(page.extract_text() or "" for page in pdf.pages)
-            return text.strip() or None
-    except Exception:
+        reader = PdfReader(str(path))
+        text_content = []
+        
+        for i, page in enumerate(reader.pages):
+            if i >= max_pages:
+                break
+            content = page.extract_text()
+            if content:
+                text_content.append(content)
+        
+        return "\n".join(text_content).strip() or None
+    except Exception as e:
+        print(f"pypdf extraction failed: {e}")
         return None
-
 
 def extract_pdf_via_ocr(path: Path) -> str:
     import pdf2image
     images = pdf2image.convert_from_path(str(path))
     return "\n".join(pytesseract.image_to_string(img) for img in images)
 
-
 def extract_image_via_ocr(path: Path) -> str:
     img = Image.open(path)
     return pytesseract.image_to_string(img)
 
-
 def extract_text_with_method(path: Path) -> tuple[str, str, list[str]]:
-    """Unified entry point: tries PDF text layer, falls back to OCR for
-    PDFs without one, or runs OCR directly for images. Returns
-    (raw_text, extraction_method, warnings)."""
+    """Unified entry point: tries text layer first, falls back to OCR."""
     warnings: list[str] = []
     if path.suffix.lower() == ".pdf":
         text_layer = extract_pdf_text_layer(path)
         if text_layer:
             return text_layer, "text_layer", warnings
-        warnings.append("PDF had no extractable text layer — fell back to OCR. Scanned documents are more error-prone.")
+        
+        warnings.append("PDF had no extractable text layer — fell back to OCR.")
         return extract_pdf_via_ocr(path), "ocr", warnings
+        
     elif path.suffix.lower() in IMAGE_EXTENSIONS:
         return extract_image_via_ocr(path), "ocr", warnings
+    
     else:
-        warnings.append(f"Unrecognized file type '{path.suffix}' — attempted OCR anyway, results may be unreliable.")
+        warnings.append(f"Unrecognized file type '{path.suffix}' — attempted OCR anyway.")
         return extract_image_via_ocr(path), "ocr", warnings

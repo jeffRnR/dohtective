@@ -1,10 +1,3 @@
-// app/api/report/route.ts
-// CHANGELOG: previously read mock-data/*.json with ZERO access control -
-// any caller who knew or guessed an org slug could pull that business's
-// full financial report. Now requires a verified BusinessMember row via
-// requireBusinessMember(), and reads transactions from Postgres (the real
-// multitenant data store) instead of flat files.
-
 import { NextResponse } from "next/server";
 import { prisma } from "../../lib/prisma";
 import { requireBusinessMember, UnauthorizedError } from "../../lib/authz";
@@ -33,10 +26,6 @@ export async function GET(req: Request) {
     prisma.bankStatement.findMany({ where: { businessId: business.id } }),
   ]);
 
-  // Reshape DB rows back into the snake_case shape engine.py expects -
-  // the detection engine's contract was built against the original
-  // Zoho-style JSON field names and there's no reason to change that
-  // contract just because the storage layer changed underneath it.
   const shapedTransactions = transactions.map((t) => ({
     transaction_id: t.transactionId,
     date: t.date.toISOString().slice(0, 10),
@@ -54,6 +43,7 @@ export async function GET(req: Request) {
     is_reconciled: t.isReconciled,
     notes: t.notes,
   }));
+
   const shapedInvoices = invoices.map((i) => ({
     invoice_id: i.invoiceId,
     customer_name: i.customerName,
@@ -65,6 +55,7 @@ export async function GET(req: Request) {
     reference_number: i.referenceNumber,
     branch: i.branch,
   }));
+
   const shapedBankStatements = bankStatements.map((b) => ({
     statement_id: b.statementId,
     date_from: b.dateFrom.toISOString().slice(0, 10),
@@ -92,7 +83,8 @@ export async function GET(req: Request) {
   } catch (err) {
     return NextResponse.json(
       {
-        error: "Detection service unreachable. Is the Python FastAPI service running? " +
+        error:
+          "Detection service unreachable. Is the Python FastAPI service running? " +
           `Tried: ${DETECTION_SERVICE_URL}/analyze`,
         detail: err instanceof Error ? err.message : String(err),
       },
@@ -102,20 +94,16 @@ export async function GET(req: Request) {
 
   if (!analyzeResponse.ok) {
     const detail = await analyzeResponse.text();
-    return NextResponse.json({ error: "Detection engine returned an error.", detail }, { status: analyzeResponse.status });
+    return NextResponse.json(
+      { error: "Detection engine returned an error.", detail },
+      { status: analyzeResponse.status }
+    );
   }
 
-  const { report } = (await analyzeResponse.json()) as { report: Record<string, unknown> };
+  const { report } = (await analyzeResponse.json()) as {
+    report: Record<string, unknown>;
+  };
 
-  // ── Flag memory: save a monthly snapshot, compute trend vs last month ──
-  //
-  // Design decision: snapshot ONCE PER CALENDAR MONTH per business, not on
-  // every dashboard load. Saving on every GET would flood this table with
-  // near-duplicate rows (every page refresh = a new row) and make "last
-  // month" comparisons meaningless, since "last" would mean "five seconds
-  // ago." If a snapshot already exists for the current month, it's
-  // updated in place (the month's figures can still shift as more data
-  // comes in) rather than creating a second row for the same month.
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -141,17 +129,11 @@ export async function GET(req: Request) {
       data: snapshotData,
     });
   } else if (report.cash_buffer_days !== undefined) {
-    // Only snapshot if the engine actually returned a real report (guards
-    // against persisting a snapshot for an empty/never-connected business
-    // -- see the isEmpty check on the dashboard page for the matching
-    // frontend behavior).
     await prisma.reportSnapshot.create({
       data: { businessId: business.id, ...snapshotData },
     });
   }
 
-  // Trend: most recent snapshot from a PRIOR month, not just "most
-  // recent snapshot" (which could be this month's row we just wrote).
   const priorSnapshot = await prisma.reportSnapshot.findFirst({
     where: { businessId: business.id, generatedAt: { lt: monthStart } },
     orderBy: { generatedAt: "desc" },
@@ -160,30 +142,35 @@ export async function GET(req: Request) {
   const trend = priorSnapshot
     ? {
         available: true,
-        priorMonth: priorSnapshot.generatedAt.toISOString().slice(0, 7), // "YYYY-MM"
-        cashBufferDaysDelta: (report.cash_buffer_days as number) - priorSnapshot.cashBufferDays,
+        priorMonth: priorSnapshot.generatedAt.toISOString().slice(0, 7),
+        cashBufferDaysDelta:
+          (report.cash_buffer_days as number) - priorSnapshot.cashBufferDays,
         priorCashBufferDays: priorSnapshot.cashBufferDays,
-        mixedFundsCountDelta: (report.mixed_funds_count as number) - priorSnapshot.mixedFundsCount,
+        mixedFundsCountDelta:
+          (report.mixed_funds_count as number) - priorSnapshot.mixedFundsCount,
         priorMixedFundsCount: priorSnapshot.mixedFundsCount,
       }
     : {
         available: false,
-        // Explicit, honest reason rather than just omitting the field --
-        // a founder's first month should see "not enough history yet,"
-        // not a silently missing trend section.
-        reason: "Not enough history yet -- trends appear after your second month.",
+        reason:
+          "Not enough history yet — trends appear after your second month.",
       };
 
   return NextResponse.json({
     meta: {
       company_name: business.companyName,
-      period_start: shapedTransactions[0]?.date ?? new Date().toISOString().slice(0, 10),
-      period_end: new Date().toISOString().slice(0, 10),
+      period_start:
+        shapedTransactions[0]?.date ?? now.toISOString().slice(0, 10),
+      period_end: now.toISOString().slice(0, 10),
       branches: Array.from(new Set(shapedTransactions.map((t) => t.branch))),
       currency: business.currency,
     },
     transactions: shapedTransactions,
     report,
     trend,
+    // The dashboard uses this — not flag count — to decide whether to show
+    // the choice screen. A business with transactions but zero anomalies
+    // should show the populated view, not the empty state.
+    hasTransactions: transactions.length > 0,
   });
 }

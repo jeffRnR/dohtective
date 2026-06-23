@@ -81,3 +81,4 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ organization: { slug: business.slug, company_name: business.companyName, branch_count: business.branchCount } }, { status: 201 });
 }
+

@@ -1,0 +1,5 @@
+Invoice Number,Invoice Date,Due Date,Customer Name,Total,Subject,Status,Item Name,Item Price,Quantity,Item Desc,Account,Payment Terms
+2026101,2026-06-01,2026-06-15,Tech Corp,150000,Q2 Software License,Sent,License-01,150000,1,Enterprise Suite,Sales,Net 15
+2026102,2026-06-03,2026-06-17,Retail Giants,85000,Retail Distribution,Paid,Service-01,85000,1,Distribution Fee,Sales,Net 15
+2026103,2026-06-05,2026-06-19,Global Logistics,210000,Shipping Services,Overdue,Logistics-A,105000,2,Freight charge,Sales,Net 15
+2026104,2026-06-07,2026-06-21,Small Biz Inc,12000,Maintenance,Sent,Maint-01,12000,1,Monthly Support,Sales,Net 15

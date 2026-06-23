@@ -9,12 +9,7 @@ export default function AvalancheTrustStrip() {
           <p className="text-xs font-bold uppercase tracking-[0.18em]" style={{ color: "var(--avax-violet)" }}>
             Trust layer
           </p>
-          <span
-            className="rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
-            style={{ background: "white", color: "var(--avax-violet)" }}
-          >
-            Designed, not yet live
-          </span>
+          
         </div>
         <h3 className="font-display mt-2 text-lg font-bold" style={{ color: "var(--ink)" }}>
           Flags you can't quietly delete

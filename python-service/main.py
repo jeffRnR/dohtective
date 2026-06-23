@@ -40,6 +40,7 @@ from documents.extract_receipt import extract_receipt
 from documents.extract_bank_statement import extract_bank_statement
 from documents.extract_kra_document import extract_kra_document
 from documents.extract_etims import extract_etims_receipt
+from documents.extract_mpesa import extract_mpesa_statement
 
 app = FastAPI(title="Dohtective Detection Engine", version="1.0.0")
 
@@ -114,7 +115,7 @@ def notify_sheets(payload: NotifySheetsRequest) -> Dict[str, Any]:
 # PIN/business registration certificates.
 # ─────────────────────────────────────────────────────────────────────────
 
-VALID_DOCUMENT_KINDS = {"receipt", "bank_statement", "etims", "kra_pin", "business_registration"}
+VALID_DOCUMENT_KINDS = {"receipt", "bank_statement", "etims", "kra_pin", "business_registration", "mpesa"}
 
 
 @app.post("/documents/extract")
@@ -146,6 +147,8 @@ async def extract_document(
             result = extract_bank_statement(tmp_path)
         elif document_kind == "etims":
             result = extract_etims_receipt(tmp_path)
+        elif document_kind == "mpesa":
+            result = extract_mpesa_statement(tmp_path)
         elif document_kind in ("kra_pin", "business_registration"):
             result = extract_kra_document(tmp_path, document_kind)  # type: ignore[arg-type]
         else:

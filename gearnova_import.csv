@@ -1,0 +1,7 @@
+Date,Expense Account,Amount,Description,Reference#,Status,Customer Name,Payment Mode,Expense Type,Project Name
+2026-06-02,Office Supplies,5000,Bulk A4 paper purchase,REF-5001,Paid,Office Supplies Co,Cash,Reimbursable,Internal-Admin
+2026-06-04,Travel,2500,Fuel for delivery van,REF-5002,Paid,TotalEnergies,M-Pesa,Non-Reimbursable,Delivery-Ops
+2026-06-06,Operational,12000,Office internet sub,REF-5003,Paid,CloudSync-KE,M-Pesa,Non-Reimbursable,Internal-Admin
+2026-06-08,Inventory,45000,Raw material parts,REF-5004,Paid,Supplier-Hub,Bank Transfer,Non-Reimbursable,Production-A
+2026-06-10,Travel,2500,Fuel for delivery van,REF-5005,Paid,TotalEnergies,M-Pesa,Non-Reimbursable,Delivery-Ops
+2026-06-12,Operational,1500,Tea and refreshments,REF-5006,Paid,Local Grocery,Cash,Reimbursable,Internal-Admin

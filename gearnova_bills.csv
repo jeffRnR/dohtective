@@ -1,0 +1,5 @@
+Bill Number,Date,Due Date,Vendor Name,Total,Status,Item Name,Item Price,Quantity,Account,Item Desc
+BILL-9001,2026-06-02,2026-06-16,CloudSync-KE,45000,Paid,Cloud-Sub,45000,1,Software,Monthly cloud sync
+BILL-9002,2026-06-04,2026-06-18,Bolt-Logistics,12000,Open,Logistics-B,6000,2,Operational,Delivery fees
+BILL-9003,2026-06-06,2026-06-20,Supplier-Hub,32000,Open,Hardware,8000,4,Inventory,Bulk gear units
+BILL-9004,2026-06-08,2026-06-22,Office Supplies Co,5000,Paid,Stationery,5000,1,Office Supplies,Copy paper

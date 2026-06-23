@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 
-type DocumentKind = "kra_pin" | "business_registration" | "etims" | "bank_statement";
+type DocumentKind = "kra_pin" | "business_registration" | "etims" | "bank_statement" | "mpesa";
 
 type DocStatus = "empty" | "uploading" | "done" | "error";
 
@@ -27,7 +27,7 @@ const INITIAL_SLOTS: DocSlot[] = [
   {
     kind: "business_registration",
     label: "Business registration certificate",
-    unlocks: "Confirms the business is a separate legal entity — changes how we read mixed personal/business spending.",
+    unlocks: "Confirms the business is a separate legal entity - changes how we read mixed personal/business spending.",
     accept: ".pdf,.png,.jpg,.jpeg",
     status: "empty",
   },
@@ -45,11 +45,14 @@ const INITIAL_SLOTS: DocSlot[] = [
     accept: ".pdf",
     status: "empty",
   },
+  {
+    kind: "mpesa",
+    label: "M-Pesa Statement",
+    unlocks: "Allows us to cross-reference mobile money transactions directly with your ledger.",
+    accept: ".pdf",
+    status: "empty",
+  },
 ];
-
-// Routed through Next.js, not called directly from the browser — keeps
-// the same browser -> Next.js -> Python pattern as every other call in
-// the app, and means the Python service URL never needs to be public.
 
 export default function DocumentUploadStep({ onSkip }: { onSkip?: () => void }) {
   const [slots, setSlots] = useState<DocSlot[]>(INITIAL_SLOTS);
@@ -58,6 +61,7 @@ export default function DocumentUploadStep({ onSkip }: { onSkip?: () => void }) 
     business_registration: null,
     etims: null,
     bank_statement: null,
+    mpesa: null,
   });
 
   const completedCount = slots.filter((s) => s.status === "done").length;
@@ -70,14 +74,18 @@ export default function DocumentUploadStep({ onSkip }: { onSkip?: () => void }) 
     formData.append("file", file);
 
     try {
+      // Note: We do NOT set Content-Type header here. 
+      // The browser must set it automatically to include the boundary.
       const res = await fetch(`/api/documents`, {
         method: "POST",
         body: formData,
       });
+
       if (!res.ok) {
         const detail = await res.text();
         throw new Error(detail || "Extraction failed");
       }
+
       const result = await res.json();
       setSlots((prev) =>
         prev.map((s) =>
@@ -96,14 +104,14 @@ export default function DocumentUploadStep({ onSkip }: { onSkip?: () => void }) 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="max-w-xl">
           <p className="text-xs font-bold uppercase tracking-[0.18em]" style={{ color: "var(--marigold)" }}>
-            Optional — Step 2
+            Optional - Step 2
           </p>
           <h2 className="font-display mt-1.5 text-xl font-bold" style={{ color: "var(--ink)" }}>
             Add documents for sharper, compliance-aware results
           </h2>
           <p className="mt-2 text-sm leading-6" style={{ color: "var(--sage)" }}>
             Your dashboard already works with just Zoho connected. These documents let the system
-            catch things Zoho alone can't see — skip any of them, or all of them, and add them later.
+            catch things Zoho alone can't see - skip any of them, or all of them, and add them later.
           </p>
         </div>
         <div className="shrink-0 text-right">
@@ -156,7 +164,7 @@ export default function DocumentUploadStep({ onSkip }: { onSkip?: () => void }) 
                   background: "white",
                 }}
               >
-                {slot.status === "uploading" ? "Uploading…" : slot.status === "error" ? "Try again" : "Upload"}
+                {slot.status === "uploading" ? "Uploading..." : slot.status === "error" ? "Try again" : "Upload"}
               </button>
             )}
             <input
@@ -180,7 +188,7 @@ export default function DocumentUploadStep({ onSkip }: { onSkip?: () => void }) 
           className="mt-5 text-xs font-semibold underline underline-offset-2"
           style={{ color: "var(--sage)" }}
         >
-          Skip for now — I'll add these later
+          Skip for now - I'll add these later
         </button>
       ) : null}
     </div>

@@ -2,6 +2,7 @@
 import "./globals.css";
 import "./frontend/styles/tokens.css";
 import SessionProviderWrapper from "./frontend/components/SessionProviderWrapper";
+import { ThirdwebProvider } from "thirdweb/react";
 
 export const metadata = {
   title: "Dohtective",
@@ -12,7 +13,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <SessionProviderWrapper>{children}</SessionProviderWrapper>
+        <ThirdwebProvider>
+          <SessionProviderWrapper>{children}</SessionProviderWrapper>
+        </ThirdwebProvider>
       </body>
     </html>
   );

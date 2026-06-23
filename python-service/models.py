@@ -105,7 +105,7 @@ class AnalyzeResponse(BaseModel):
 
 # ── Supporting-document extraction shapes ──
 
-DocumentKind = Literal["receipt", "bank_statement", "etims", "kra_pin", "business_registration"]
+DocumentKind = Literal["receipt", "bank_statement", "etims", "kra_pin", "business_registration", "mpesa"]
 
 
 class ExtractedLineItem(BaseModel):
