@@ -1,0 +1,15 @@
+date,ref,type,entity,category,amount,description
+2026-03-01,BAL-START,Initial,Company,Equity,1200000,Starting Cash Buffer
+2026-03-05,INV-1001,Revenue,Customer-A,Sales,150000,MacBook Pro Sale
+2026-03-06,BILL-5001,Supplier,Apple-Distro,Stock,450000,Initial Stock Load
+2026-04-01,RENT-001,Operating,Nairobi-Realty,Rent,85000,April Shop Rent
+2026-04-10,INV-1002,Revenue,Customer-B,Sales,165000,iPhone 15 Sale
+2026-04-12,BILL-5002,Supplier,Global-Logistics,Logistics,49000,Import Fee
+2026-04-25,PETTY-003,PettyCash,Staff-Office,Petty Cash,15000,Office Supplies
+2026-05-05,OWNER-001,Owner,Munyi-Personal,Owner Draw,500000,Cash Withdrawal (Buffer Impact)
+2026-05-12,BILL-5005,Supplier,Tech-Solutions,Services,250000,Consultancy Fee
+2026-05-15,EXP-002,Operating,Unknown-Transfer,Misc,25000,Night Transfer (Unverified)
+2026-06-01,INV-1004,Revenue,Customer-E,Sales,45000,Low Volume Sale
+2026-06-05,BILL-5006,Supplier,Samsung-Global,Stock,200000,Inventory Purchase (Liquidity Trap)
+2026-06-10,EXP-003,Operating,City-Power,Utility,6000,Shop Electricity
+2026-06-15,INV-1005,Revenue,Customer-F,Sales,30000,Small Accessory Sale

@@ -1,40 +1,97 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import fs from 'fs';
-import path from 'path';
-import { requireBusinessMember, UnauthorizedError } from '../../../../lib/authz';
+// /app/api/business/[slug]/ingest/route.ts
+import { exec } from "child_process";
+import { promisify } from "util";
+import fs from "fs";
+import path from "path";
+import {
+  requireBusinessMember,
+  UnauthorizedError,
+} from "../../../../lib/authz";
+import { prisma } from "../../../../lib/prisma";
 
 const execAsync = promisify(exec);
 
+// Inflow type strings from manual CSV exports
+const INFLOW_TYPES = new Set([
+  "income",
+  "revenue",
+  "sales",
+  "receipt",
+  "inflow",
+  "credit",
+  "initial",
+]);
+
+// Outflow type strings from manual CSV exports
+const OUTFLOW_TYPES = new Set([
+  "expense",
+  "supplier",
+  "operating",
+  "owner",
+  "pettycash",
+  "petty cash",
+  "logistics",
+  "services",
+  "misc",
+  "utility",
+  "utilities",
+  "bill",
+  "cost",
+  "payment",
+  "stock",
+  "rent",
+  "salary",
+  "salaries",
+  "payroll",
+  "tax",
+  "transfer",
+  "withdrawal",
+  "draw",
+]);
+
+function classifyType(rawType: string, amount: number): string {
+  const normalised = rawType.trim().toLowerCase().replace(/-/g, " ");
+  if (INFLOW_TYPES.has(normalised)) return "Income";
+  if (OUTFLOW_TYPES.has(normalised)) return "Expense";
+  // Sign-based fallback for unrecognised types
+  return amount >= 0 ? "Income" : "Expense";
+}
+
 function normalizeForEngine(tx: any, index: number): Record<string, any> {
-  const amount = typeof tx.amount === 'number' ? tx.amount : parseFloat(tx.amount ?? '0') || 0;
+  const amount =
+    typeof tx.amount === "number"
+      ? tx.amount
+      : parseFloat(tx.amount ?? "0") || 0;
+  const rawType = tx.type ?? tx.source ?? "";
   return {
     transaction_id: tx.id ?? `manual-${index}`,
     date: tx.date ?? new Date().toISOString().slice(0, 10),
-    branch: tx.branch ?? 'Main',
-    type: amount >= 0 ? 'Income' : 'Expense',
-    account_name: tx.account_name ?? 'Manual Upload',
-    category_name: tx.category ?? tx.category_name ?? 'Uncategorized',
-    contact_name: tx.vendor ?? tx.contact_name ?? 'Unknown',
+    branch: tx.branch ?? "Main",
+    // Preserve the original type string meaning rather than guessing from sign alone
+    type: classifyType(rawType, amount),
+    account_name: tx.account_name ?? "Manual Upload",
+    category_name: tx.category ?? tx.category_name ?? "Uncategorized",
+    contact_name: tx.vendor ?? tx.contact_name ?? "Unknown",
     reference_number: tx.id ?? `manual-${index}`,
-    payment_method: tx.payment_method ?? 'Manual',
-    description: tx.description ?? '',
+    payment_method: tx.payment_method ?? "Manual",
+    description: tx.description ?? "",
     amount: Math.abs(amount),
-    status: 'Manual',
-    bank_account: tx.bank_account ?? 'Manual Upload',
+    status: "Manual",
+    bank_account: tx.bank_account ?? "Manual Upload",
     is_reconciled: false,
-    notes: tx.notes ?? '',
+    notes: tx.notes ?? "",
   };
 }
 
 export async function POST(
   req: Request,
-  { params }: { params: Promise<{ slug: string }> }
+  { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params;
 
+  let business: { id: string };
   try {
-    await requireBusinessMember(slug);
+    ({ business } = await requireBusinessMember(slug));
   } catch (err) {
     if (err instanceof UnauthorizedError) {
       return Response.json({ error: err.message }, { status: err.status });
@@ -46,29 +103,31 @@ export async function POST(
   const rawTransactions: any[] = body.transactions ?? [];
 
   if (rawTransactions.length === 0) {
-    return Response.json({ error: 'No transactions provided.' }, { status: 400 });
+    return Response.json(
+      { error: "No transactions provided." },
+      { status: 400 },
+    );
   }
 
   const engineTransactions = rawTransactions.map(normalizeForEngine);
 
-  const backendDir = path.join(process.cwd(), 'backend');
+  const backendDir = path.join(process.cwd(), "backend");
   const tempFile = `temp_data_${slug}.json`;
   const filePath = path.join(backendDir, tempFile);
 
   try {
     const payload = { businessId: slug, transactions: engineTransactions };
-    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8');
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf8");
 
-    const { stdout, stderr } = await execAsync(
-      `python engine.py ${tempFile}`,
-      { cwd: backendDir }
-    );
+    const { stdout, stderr } = await execAsync(`python engine.py ${tempFile}`, {
+      cwd: backendDir,
+    });
 
     if (!stdout || !stdout.trim()) {
       throw new Error(
         stderr
           ? `Engine produced no output. Stderr: ${stderr}`
-          : 'Engine produced no output and no error message.'
+          : "Engine produced no output and no error message.",
       );
     }
 
@@ -78,13 +137,101 @@ export async function POST(
       fs.unlinkSync(filePath);
     }
 
+    // ── Persist transactions ───────────────────────────────────────────
+    // Upsert each row so re-uploading the same file doesn't duplicate
+    // data. Keyed on [businessId, transactionId] per the schema unique
+    // constraint. Date parsing: engine transactions always have a
+    // YYYY-MM-DD string at this point — new Date() handles that cleanly.
+    await Promise.all(
+      engineTransactions.map((tx) =>
+        prisma.transaction.upsert({
+          where: {
+            businessId_transactionId: {
+              businessId: business.id,
+              transactionId: tx.transaction_id,
+            },
+          },
+          create: {
+            businessId: business.id,
+            transactionId: tx.transaction_id,
+            date: new Date(tx.date),
+            branch: tx.branch,
+            type: tx.type,
+            accountName: tx.account_name,
+            categoryName: tx.category_name,
+            contactName: tx.contact_name,
+            referenceNumber: tx.reference_number,
+            paymentMethod: tx.payment_method,
+            description: tx.description,
+            amount: tx.amount,
+            status: tx.status,
+            bankAccount: tx.bank_account,
+            isReconciled: tx.is_reconciled,
+            notes: tx.notes,
+          },
+          update: {
+            date: new Date(tx.date),
+            branch: tx.branch,
+            type: tx.type,
+            accountName: tx.account_name,
+            categoryName: tx.category_name,
+            contactName: tx.contact_name,
+            referenceNumber: tx.reference_number,
+            paymentMethod: tx.payment_method,
+            description: tx.description,
+            amount: tx.amount,
+            status: tx.status,
+            bankAccount: tx.bank_account,
+            isReconciled: tx.is_reconciled,
+            notes: tx.notes,
+          },
+        }),
+      ),
+    );
+
+    // ── Persist report snapshot ────────────────────────────────────────
+    // Same logic as report/route.ts: one snapshot per calendar month,
+    // updated in place if one already exists this month rather than
+    // creating a second row for the same period.
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const existingThisMonth = await prisma.reportSnapshot.findFirst({
+      where: { businessId: business.id, generatedAt: { gte: monthStart } },
+      orderBy: { generatedAt: "desc" },
+    });
+
+    const snapshotData = {
+      cashBufferDays: report.cash_buffer_days as number,
+      cashBufferRiskLevel: report.cash_buffer_risk_level as string,
+      totalCashInflows: report.total_cash_inflows as number,
+      totalCashOutflows: report.total_cash_outflows as number,
+      mixedFundsCount: report.mixed_funds_count as number,
+      mixedFundsTotal: report.mixed_funds_total as number,
+      flagsJson: report.flags as object,
+      plainLanguageJson: report.plain_language as object,
+    };
+
+    if (existingThisMonth) {
+      await prisma.reportSnapshot.update({
+        where: { id: existingThisMonth.id },
+        data: snapshotData,
+      });
+    } else {
+      await prisma.reportSnapshot.create({
+        data: { businessId: business.id, ...snapshotData },
+      });
+    }
+
     return Response.json({ success: true, report });
   } catch (err) {
     if (fs.existsSync(filePath)) {
-      try { fs.unlinkSync(filePath); } catch {}
+      try {
+        fs.unlinkSync(filePath);
+      } catch {}
     }
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[Ingest] Error:', message);
+    console.error("[Ingest] Error:", message);
     return Response.json({ error: message }, { status: 500 });
   }
 }

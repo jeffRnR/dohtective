@@ -21,7 +21,7 @@ export default function AvalancheTrustStrip() {
       </div>
       <div className="mt-5 flex items-center gap-2 font-mono text-[11px]" style={{ color: "var(--avax-violet)" }}>
         <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--avax-violet)" }} />
-        Avalanche Fuji testnet - anchoring not yet active
+        Avalanche Fuji testnet
       </div>
     </div>
   );

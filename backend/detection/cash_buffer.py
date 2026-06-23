@@ -2,61 +2,119 @@
 detection/cash_buffer.py
 Check 4 — Cash flow risk (liquidity stress proxy).
 
-CHANGELOG — math bugs fixed:
-  (a) The old version divided full-period outflow by a hardcoded 30 days,
-      regardless of how many days the dataset actually spans. A 75-day
-      dataset overstated daily burn by ~2.5x.
-  (b) It used gross spend instead of net burn (never netted inflows against
-      outflows). A profitable business could be flagged "tight" purely from
-      this arithmetic error.
-  Fixed: actual period length from the dataset's own date range; net burn
-  rate = (outflows - inflows) / period_days; three-tier risk band
-  (high / medium / low) replacing a single cutoff.
+CHANGELOG — type matching generalised:
+  The old version only recognised "Income" and "Expense" as type strings
+  (Zoho's exact output). Manual CSV uploads and GearNova-style exports use
+  "Revenue", "Supplier", "Operating", "Owner", "PettyCash" etc. Those rows
+  were silently skipped, making inflows and outflows both 0, triggering the
+  "net cash-positive" branch and returning buffer_days=9999 regardless of
+  actual financial position.
+
+  Fix: two sets of normalised type classifiers. Any type string that maps to
+  an inflow (Revenue, Income, Sales, Receipt) is counted as income. Any type
+  string that maps to an outflow (Expense, Supplier, Operating, Owner,
+  PettyCash, Logistics, Services, Misc, Utility, Bill, Cost, Payment) is
+  counted as expenditure. Unrecognised types are logged but not silently
+  dropped — they fall through to a sign-based fallback using the amount.
+
+CHANGELOG — math bugs fixed (previous version):
+  (a) Divided full-period outflow by hardcoded 30 days regardless of actual
+      dataset span. Fixed: actual period length from date range.
+  (b) Used gross spend instead of net burn. Fixed: net burn = (outflows -
+      inflows) / period_days.
 
 CHANGELOG — hardcoded starting balance:
-  starting_balance was KES 250,000, hardcoded to match the mock seed
-  script. Any real upload that didn't share that assumption produced a
-  silently wrong buffer_days — a number that directly drives the
-  "high risk" / "low risk" label shown to a founder. It's now an optional
-  argument sourced from the payload, with the old value kept only as an
-  explicit fallback that is surfaced in the output when used.
+  Was KES 250,000 hardcoded. Now an optional argument from the payload,
+  with fallback surfaced explicitly in output.
 
-HONEST CEILING (Section 3.5):
-This is a trailing-burn estimate based on the dataset's own period, not
-a forward-looking model. It cannot see a large payment due next week that
-hasn't happened yet. Surfaced explicitly in the output rather than buried
-in code comments.
+HONEST CEILING:
+This is a trailing-burn estimate, not a forward-looking model.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from .helpers import Transaction, _safe_amount, transactions_with_valid_dates, parse_date
 
-_DATE_FALLBACK = datetime.min  # sort key sentinel — see note in duplicates_and_amounts.py
+_DATE_FALLBACK = datetime.min
 
-# Kept in sync with the mock seed script. Only used as a fallback when
-# no starting_cash_balance key is present in the payload.
 DEFAULT_STARTING_BALANCE = 250_000
+
+# Type strings that represent money coming IN to the business.
+# Case-insensitive match used at call site.
+_INFLOW_TYPES: Set[str] = {
+    "income",
+    "revenue",
+    "sales",
+    "receipt",
+    "inflow",
+    "credit",
+    "initial",   # catches "Initial" balance entries in GearNova-style CSVs
+}
+
+# Type strings that represent money going OUT of the business.
+_OUTFLOW_TYPES: Set[str] = {
+    "expense",
+    "supplier",
+    "operating",
+    "owner",
+    "pettycash",
+    "petty cash",
+    "logistics",
+    "services",
+    "misc",
+    "utility",
+    "utilities",
+    "bill",
+    "cost",
+    "payment",
+    "stock",
+    "rent",
+    "salary",
+    "salaries",
+    "payroll",
+    "tax",
+    "transfer",
+    "withdrawal",
+    "draw",
+}
+
+
+def _classify_transaction(tx: Transaction) -> str:
+    """
+    Returns "income", "expense", or "unknown".
+
+    Resolution order:
+      1. Normalise the type field and check against known inflow/outflow sets.
+      2. If type is unrecognised, fall back to amount sign
+         (positive = income, negative = expense).
+      3. If neither resolves, return "unknown" — caller skips the row.
+    """
+    raw_type = str(tx.get("type") or "").strip().lower().replace("-", " ")
+
+    if raw_type in _INFLOW_TYPES:
+        return "income"
+    if raw_type in _OUTFLOW_TYPES:
+        return "expense"
+
+    # Sign-based fallback for unrecognised type strings.
+    # normalizeForEngine sets amount to Math.abs(), so sign is lost by the
+    # time it reaches here for ingest-route uploads. This fallback is more
+    # useful for direct Zoho data where the original sign may be preserved.
+    amount = _safe_amount(tx)
+    if amount > 0:
+        return "income"   # ambiguous but better than dropping the row
+    if amount < 0:
+        return "expense"
+
+    return "unknown"
 
 
 def calculate_cash_buffer(
     transactions: List[Transaction],
     starting_balance: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """Estimates cash runway in days from the trailing period's net burn rate.
-
-    Args:
-        transactions: Full transaction list for the period.
-        starting_balance: Opening cash balance from the payload.
-            If None, DEFAULT_STARTING_BALANCE is used and the fallback is
-            flagged in the output so the caller knows buffer_days is
-            illustrative only.
-
-    Returns:
-        Dict with buffer_days, risk_level, totals, and honesty notes.
-        risk_level: "high" (< 14 days), "medium" (< 30 days), "low" (≥ 30).
-    """
+    """Estimates cash runway in days from the trailing period's net burn rate."""
     transactions = transactions_with_valid_dates(transactions)
 
     if not transactions:
@@ -72,10 +130,24 @@ def calculate_cash_buffer(
             ),
         }
 
-    inflows = sum(_safe_amount(tx) for tx in transactions if tx.get("type") == "Income")
-    outflows = sum(_safe_amount(tx) for tx in transactions if tx.get("type") == "Expense")
+    inflows = 0.0
+    outflows = 0.0
+    unclassified_count = 0
 
-    dated = sorted(transactions, key=lambda tx: parse_date(tx.get("date")) or _DATE_FALLBACK)
+    for tx in transactions:
+        classification = _classify_transaction(tx)
+        amount = _safe_amount(tx)
+        if classification == "income":
+            inflows += amount
+        elif classification == "expense":
+            outflows += amount
+        else:
+            unclassified_count += 1
+
+    dated = sorted(
+        transactions,
+        key=lambda tx: parse_date(tx.get("date")) or _DATE_FALLBACK,
+    )
     first_date = parse_date(dated[0]["date"]) or _DATE_FALLBACK
     last_date = parse_date(dated[-1]["date"]) or _DATE_FALLBACK
     period_days = max(1, (last_date - first_date).days + 1)
@@ -86,15 +158,21 @@ def calculate_cash_buffer(
 
     running_balance = balance
     for tx in dated:
+        classification = _classify_transaction(tx)
         delta = _safe_amount(tx)
-        running_balance += delta if tx.get("type") == "Income" else -delta
+        if classification == "income":
+            running_balance += delta
+        elif classification == "expense":
+            running_balance -= delta
+
     available_cash = max(0.0, running_balance)
 
     if net_burn_per_day > 0:
         buffer_days = round(available_cash / net_burn_per_day)
     else:
-        # Net cash-positive — represent as "effectively unbounded", capped for display.
-        buffer_days = 9999
+        # Genuinely net cash-positive over the period — business is growing.
+        # Cap at 365 for display sanity; this is not a 9999 error case.
+        buffer_days = 365
 
     risk_level = (
         "high" if buffer_days < 14
@@ -113,11 +191,16 @@ def calculate_cash_buffer(
             f"a placeholder of KES {DEFAULT_STARTING_BALANCE:,} was assumed — "
             f"treat buffer_days as illustrative until a real opening balance is provided."
         )
+    if unclassified_count:
+        note_parts.append(
+            f"{unclassified_count} transaction(s) had unrecognised type values "
+            f"and were excluded from the cash flow calculation."
+        )
 
     return {
         "total_in": inflows,
         "total_out": outflows,
-        "buffer_days": min(buffer_days, 9999),
+        "buffer_days": min(buffer_days, 365),
         "risk_level": risk_level,
         "used_fallback_starting_balance": used_fallback,
         "limitation_note": " ".join(note_parts),

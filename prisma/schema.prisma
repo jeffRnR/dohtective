@@ -26,7 +26,7 @@ model User {
   email         String?   @unique
   emailVerified DateTime?
   image         String?
-  passwordHash  String?   // null for Google-only accounts; set for Credentials sign-up
+  passwordHash  String? // null for Google-only accounts; set for Credentials sign-up
 
   accounts Account[]
   sessions Session[]
@@ -34,8 +34,9 @@ model User {
   memberships BusinessMember[]
   sentInvites BusinessInvite[] @relation("InvitedBy")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  googleSheetsConnection GoogleSheetsConnection?
 }
 
 model Account {
@@ -100,15 +101,15 @@ enum BusinessRole {
 // or reclassified. A snapshot that silently changed when underlying data
 // changed would make trend comparisons meaningless.
 model ReportSnapshot {
-  id         String   @id @default(cuid())
+  id         String @id @default(cuid())
   businessId String
 
-  cashBufferDays     Int
+  cashBufferDays      Int
   cashBufferRiskLevel String
-  totalCashInflows   Float
-  totalCashOutflows  Float
-  mixedFundsCount    Int
-  mixedFundsTotal    Float
+  totalCashInflows    Float
+  totalCashOutflows   Float
+  mixedFundsCount     Int
+  mixedFundsTotal     Float
 
   // Full flags array and plain-language summary, stored as JSON so the
   // snapshot is self-contained -- a year from now, this row alone (with
@@ -125,19 +126,19 @@ model ReportSnapshot {
 }
 
 model Business {
-  id          String  @id @default(cuid())
-  slug        String  @unique
+  id          String @id @default(cuid())
+  slug        String @unique
   companyName String
-  branchCount Int     @default(1)
-  currency    String  @default("KES")
+  branchCount Int    @default(1)
+  currency    String @default("KES")
 
-  members     BusinessMember[]
-  invites     BusinessInvite[]
-  transactions Transaction[]
-  invoices     Invoice[]
-  bankStatements BankStatement[]
-  documents    SupportingDocument[]
-  zohoConnection ZohoConnection?
+  members         BusinessMember[]
+  invites         BusinessInvite[]
+  transactions    Transaction[]
+  invoices        Invoice[]
+  bankStatements  BankStatement[]
+  documents       SupportingDocument[]
+  zohoConnection  ZohoConnection?
   reportSnapshots ReportSnapshot[]
 
   createdAt DateTime @default(now())
@@ -168,12 +169,12 @@ model BusinessMember {
 // time, NOT sent as a real email yet. See lib/invites.ts for the no-op
 // send function this points at.
 model BusinessInvite {
-  id         String       @id @default(cuid())
-  businessId String
-  email      String
-  role       BusinessRole @default(accountant)
+  id          String       @id @default(cuid())
+  businessId  String
+  email       String
+  role        BusinessRole @default(accountant)
   invitedById String
-  acceptedAt DateTime?
+  acceptedAt  DateTime?
 
   business  Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   invitedBy User     @relation("InvitedBy", fields: [invitedById], references: [id])
@@ -192,30 +193,30 @@ model BusinessInvite {
 // ─────────────────────────────────────────────────────────────────────
 
 model Transaction {
-  id               String   @id @default(cuid())
-  businessId       String
-  transactionId    String   // Zoho's own ID or a generated one — kept separate from our cuid `id`
-  date             DateTime
-  branch           String
-  type             String   // "Income" | "Expense"
-  accountName      String
-  categoryName     String
-  contactName      String
-  referenceNumber  String
-  paymentMethod    String
-  description      String
-  amount           Float
-  status           String
-  bankAccount      String
-  isReconciled     Boolean  @default(false)
-  notes            String   @default("")
+  id              String   @id @default(cuid())
+  businessId      String
+  transactionId   String // Zoho's own ID or a generated one — kept separate from our cuid `id`
+  date            DateTime
+  branch          String
+  type            String // "Income" | "Expense"
+  accountName     String
+  categoryName    String
+  contactName     String
+  referenceNumber String
+  paymentMethod   String
+  description     String
+  amount          Float
+  status          String
+  bankAccount     String
+  isReconciled    Boolean  @default(false)
+  notes           String   @default("")
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
-  @@index([businessId])
   @@unique([businessId, transactionId])
+  @@index([businessId])
 }
 
 model Invoice {
@@ -233,25 +234,25 @@ model Invoice {
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-  @@index([businessId])
   @@unique([businessId, invoiceId])
+  @@index([businessId])
 }
 
 model BankStatement {
-  id              String   @id @default(cuid())
-  businessId      String
-  statementId     String
-  dateFrom        DateTime
-  dateTo          DateTime
-  openingBalance  Float
-  closingBalance  Float
-  reconciled      Boolean  @default(false)
-  notes           String   @default("")
+  id             String   @id @default(cuid())
+  businessId     String
+  statementId    String
+  dateFrom       DateTime
+  dateTo         DateTime
+  openingBalance Float
+  closingBalance Float
+  reconciled     Boolean  @default(false)
+  notes          String   @default("")
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-  @@index([businessId])
   @@unique([businessId, statementId])
+  @@index([businessId])
 }
 
 // Uploaded compliance/supporting documents — receipt, bank_statement,
@@ -259,7 +260,7 @@ model BankStatement {
 // python-service/models.py; stores the extraction RESULT, not the file
 // itself (file storage is a separate concern — see note in lib/storage).
 model SupportingDocument {
-  id               String   @id @default(cuid())
+  id               String @id @default(cuid())
   businessId       String
   documentKind     String
   sourceFilename   String
@@ -280,13 +281,24 @@ model SupportingDocument {
 // file store. refreshToken should be encrypted at rest before production
 // (see app/lib/zoho-client.ts's existing honesty note about this).
 model ZohoConnection {
-  id             String   @id @default(cuid())
-  businessId     String   @unique
+  id             String  @id @default(cuid())
+  businessId     String  @unique
   refreshToken   String
   apiDomain      String
   organizationId String?
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  connectedAt DateTime @default(now())
+}
+
+model GoogleSheetsConnection {
+  id           String @id @default(cuid())
+  userId       String @unique
+  refreshToken String @db.Text // encrypt at rest before production — same note as ZohoConnection
+  email        String // Google account email that authorized Sheets access
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   connectedAt DateTime @default(now())
 }
