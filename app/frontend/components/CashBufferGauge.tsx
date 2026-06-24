@@ -2,50 +2,73 @@
 
 import { useEffect, useState } from "react";
 
-type Status = "safe" | "watch" | "urgent" | "unknown";
+type Status = "safe" | "watch" | "urgent" | "unknown" | "cannot_compute";
 
 function getStatus(days: number | null): Status {
-  if (days === null) return "unknown";
+  if (days === null) return "cannot_compute";
   if (days < 10) return "urgent";
   if (days < 20) return "watch";
+  if (days >= 365) return "cannot_compute";
   return "safe";
 }
 
-const STATUS_CONFIG: Record<Status, { color: string; dim: string; label: string; sentence: (d: number) => string }> = {
+const STATUS_CONFIG: Record<
+  Status,
+  { color: string; dim: string; label: string; sentence: (d: number | null) => string }
+> = {
   safe: {
     color: "var(--savanna)",
     dim: "var(--savanna-dim)",
     label: "Healthy",
-    sentence: (d) => `At today's pace, you can cover ${d} days of spending without new income.`,
+    sentence: (d) =>
+      `At today's pace, you can cover ${d} days of spending without new income.`,
   },
   watch: {
     color: "var(--marigold)",
     dim: "var(--marigold-dim)",
     label: "Worth watching",
-    sentence: (d) => `You have ${d} days of buffer left - start lining up what's coming in next.`,
+    sentence: (d) =>
+      `You have ${d} days of buffer left — start lining up what's coming in next.`,
   },
   urgent: {
     color: "var(--clay)",
     dim: "var(--clay-dim)",
     label: "Needs attention",
-    sentence: (d) => `Only ${d} days of buffer left at the current pace. Worth a look today.`,
+    sentence: (d) =>
+      `Only ${d} days of buffer left at the current pace. Worth a look today.`,
   },
   unknown: {
     color: "var(--sage)",
     dim: "var(--sage-dim)",
-    label: "Not connected",
-    sentence: () => "Connect your books to see your cash buffer.",
+    label: "No data yet",
+    sentence: () => "Upload your financial statements to see your cash buffer.",
+  },
+  cannot_compute: {
+    color: "var(--sage)",
+    dim: "var(--sage-dim)",
+    label: "Cannot estimate",
+    sentence: () =>
+      "We could not estimate your cash buffer from the uploaded files. " +
+      "See the explanation below.",
   },
 };
 
-export default function CashBufferGauge({ days }: { days: number | null }) {
-  const status = getStatus(days);
+export default function CashBufferGauge({
+  days,
+  limitationNote,
+  cannotCompute,
+}: {
+  days: number | null;
+  limitationNote?: string;
+  cannotCompute?: boolean;
+}) {
+  const effectiveDays = cannotCompute ? null : days;
+  const status = getStatus(effectiveDays);
   const cfg = STATUS_CONFIG[status];
   const [displayed, setDisplayed] = useState(0);
 
-  // Odometer-style count-up - the one orchestrated motion moment on the page.
   useEffect(() => {
-    if (days === null) {
+    if (effectiveDays === null) {
       setDisplayed(0);
       return;
     }
@@ -55,63 +78,116 @@ export default function CashBufferGauge({ days }: { days: number | null }) {
     const animate = (now: number) => {
       const progress = Math.min(1, (now - start) / duration);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplayed(Math.round(eased * days));
+      setDisplayed(Math.round(eased * effectiveDays));
       if (progress < 1) frame = requestAnimationFrame(animate);
     };
     frame = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(frame);
-  }, [days]);
+  }, [effectiveDays]);
 
-  // Arc gauge geometry - semicircle, fill proportional to a 0-45 day scale (45d ~ full).
-  const pct = days === null ? 0 : Math.max(0, Math.min(1, days / 45));
+  const pct =
+    effectiveDays === null ? 0 : Math.max(0, Math.min(1, effectiveDays / 45));
   const r = 80;
   const circumference = Math.PI * r;
   const dashOffset = circumference * (1 - pct);
 
   return (
-    <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-8">
-      <div className="relative h-[120px] w-[200px] shrink-0">
-        <svg viewBox="0 0 200 110" className="h-full w-full" aria-hidden="true">
-          <path
-            d="M 20 100 A 80 80 0 0 1 180 100"
-            fill="none"
-            stroke="var(--bone-dim)"
-            strokeWidth="14"
-            strokeLinecap="round"
-          />
-          <path
-            d="M 20 100 A 80 80 0 0 1 180 100"
-            fill="none"
-            stroke={cfg.color}
-            strokeWidth="14"
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={dashOffset}
-            style={{ transition: "stroke-dashoffset 700ms cubic-bezier(0.16,1,0.3,1), stroke 300ms" }}
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-end pb-1">
-          <span className="font-display text-[44px] font-bold leading-none tabular-nums" style={{ color: cfg.color }}>
-            {days === null ? "-" : displayed}
+    <div className="space-y-4">
+      <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-8">
+        <div className="relative h-30 w-50 shrink-0">
+          <svg viewBox="0 0 200 110" className="h-full w-full" aria-hidden="true">
+            <path
+              d="M 20 100 A 80 80 0 0 1 180 100"
+              fill="none"
+              stroke="var(--bone-dim)"
+              strokeWidth="14"
+              strokeLinecap="round"
+            />
+            <path
+              d="M 20 100 A 80 80 0 0 1 180 100"
+              fill="none"
+              stroke={cfg.color}
+              strokeWidth="14"
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={dashOffset}
+              style={{
+                transition:
+                  "stroke-dashoffset 700ms cubic-bezier(0.16,1,0.3,1), stroke 300ms",
+              }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-end pb-1">
+            <span
+              className="font-display text-[44px] font-bold leading-none tabular-nums"
+              style={{ color: cfg.color }}
+            >
+              {effectiveDays === null ? "?" : displayed}
+            </span>
+            <span
+              className="mt-1 text-xs font-semibold uppercase tracking-[0.2em]"
+              style={{ color: "var(--sage)" }}
+            >
+              days of buffer
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <span
+            className="inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.14em]"
+            style={{ background: cfg.dim, color: cfg.color }}
+          >
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ background: cfg.color }}
+            />
+            {cfg.label}
           </span>
-          <span className="mt-1 text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--sage)" }}>
-            days of buffer
-          </span>
+          <p
+            className="max-w-md text-base leading-6"
+            style={{ color: "var(--ink)" }}
+          >
+            {cfg.sentence(effectiveDays)}
+          </p>
         </div>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <span
-          className="inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.14em]"
-          style={{ background: cfg.dim, color: cfg.color }}
+      {/* Honest explanation when buffer cannot be computed */}
+      {(cannotCompute || effectiveDays === null) && limitationNote && (
+        <div
+          className="rounded-md border p-4"
+          style={{ borderColor: "var(--line)", background: "var(--bone)" }}
         >
-          <span className="h-1.5 w-1.5 rounded-full" style={{ background: cfg.color }} />
-          {cfg.label}
-        </span>
-        <p className="max-w-md text-base leading-6" style={{ color: "var(--ink)" }}>
-          {cfg.sentence(days ?? 0)}
-        </p>
-      </div>
+          <p
+            className="text-xs font-bold uppercase tracking-wider mb-1"
+            style={{ color: "var(--sage)" }}
+          >
+            Why we couldn't estimate your buffer
+          </p>
+          <p className="text-sm leading-6" style={{ color: "var(--ink)" }}>
+            {limitationNote}
+          </p>
+        </div>
+      )}
+
+      {/* Limitation note when buffer IS computed but with caveats */}
+      {!cannotCompute && effectiveDays !== null && limitationNote && (
+        <details className="group">
+          <summary
+            className="cursor-pointer text-xs font-semibold"
+            style={{ color: "var(--sage)" }}
+          >
+            How is this calculated?
+          </summary>
+          <p
+            className="mt-2 text-xs leading-5"
+            style={{ color: "var(--sage)" }}
+          >
+            {limitationNote}
+          </p>
+        </details>
+      )}
     </div>
   );
 }

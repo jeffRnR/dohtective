@@ -6,6 +6,19 @@ export type FlagItem = {
   confidenceLabel?: string;
 };
 
+export type FlagResponseType =
+  | "already_handled"
+  | "intentional"
+  | "need_help";
+
+export type FlagResponse = {
+  response: FlagResponseType;
+  respondedAt: string;
+};
+
+// Keyed by flagTitle — matches what report/route.ts returns
+export type FlagResponseMap = Record<string, FlagResponse>;
+
 export type FollowupWorkflowItem = {
   title: string;
   action: string;
@@ -40,6 +53,19 @@ export type AccountingErrors = {
   sequence_gaps_found: number;
   gap_details: Array<{ between: [string, string]; missing_count: number }>;
   limitation_note: string;
+};
+
+export type DataQualityIssue = {
+  level: "info" | "warning" | "excluded";
+  message: string;
+};
+
+export type DataQuality = {
+  totalExtracted: number;
+  usableRows: number;
+  coveragePct: number;
+  issues: DataQualityIssue[];
+  acceptable: boolean;
 };
 
 export type ReportData = {
@@ -111,17 +137,12 @@ export type ZohoPayload = {
   transactions: FrontendTransaction[] | null;
   report: ReportData;
   trend: ReportTrend;
-  // Authoritative empty-state signal from the server. A business with
-  // transactions but zero anomalies must show the populated view — using
-  // flag count for this was the bug. This field replaces that heuristic.
   hasTransactions: boolean;
+  // Keyed by flagTitle — O(1) lookup in FlagFeed per flag card
+  flagResponses: FlagResponseMap;
   zoho_connected?: boolean;
 };
 
-// Output shape of CsvUploader — frontend-neutral, does not mirror
-// engine.py's internal field names. The ingest route's normalizeForEngine()
-// function is the only place that knows how to translate this into the
-// engine's expected transaction shape.
 export interface NormalizedTransaction {
   id: string;
   date: string;
@@ -129,6 +150,6 @@ export interface NormalizedTransaction {
   description: string;
   category: string;
   vendor: string;
-  source: 'ZOHO' | 'EXCEL' | 'MPESA';
+  source: "ZOHO" | "EXCEL" | "MPESA";
   raw: any;
 }

@@ -57,6 +57,59 @@ function classifyType(rawType: string, amount: number): string {
   return amount >= 0 ? "Income" : "Expense";
 }
 
+function parseDate(raw: unknown): string {
+  // Catches null, undefined, empty string, whitespace-only, and unparseable formats.
+  // Returns today as a YYYY-MM-DD fallback rather than letting Invalid Date
+  // propagate to Prisma, which rejects it with a hard 500.
+  if (!raw || typeof raw !== "string" || !raw.trim()) {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  // Handle common non-ISO formats from PDF/CSV exports:
+  //   DD/MM/YYYY  →  2024/03/15  →  2024-03-15
+  //   MM-DD-YYYY  →  03-15-2024  →  2024-03-15
+  const cleaned = raw.trim();
+
+  // DD/MM/YYYY or DD-MM-YYYY (most common in KE/African PDF exports)
+  const dmy = cleaned.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+  if (dmy) {
+    const [, d, m, y] = dmy;
+    const iso = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    const parsed = new Date(iso);
+    if (!isNaN(parsed.getTime())) return iso;
+  }
+
+  // MM/DD/YYYY (US format)
+  const mdy = cleaned.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+  if (mdy) {
+    const [, m, d, y] = mdy;
+    const iso = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    const parsed = new Date(iso);
+    if (!isNaN(parsed.getTime())) return iso;
+  }
+
+  // YYYY/MM/DD or already ISO YYYY-MM-DD
+  const ymd = cleaned.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/);
+  if (ymd) {
+    const [, y, m, d] = ymd;
+    const iso = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    const parsed = new Date(iso);
+    if (!isNaN(parsed.getTime())) return iso;
+  }
+
+  // Last resort: let Date parse it (handles "15 Mar 2024", "March 15 2024", etc.)
+  const fallback = new Date(cleaned);
+  if (!isNaN(fallback.getTime())) {
+    return fallback.toISOString().slice(0, 10);
+  }
+
+  // Genuinely unparseable — log and use today so the transaction isn't lost.
+  console.warn(
+    `[ingest] Could not parse date "${raw}" — using today as fallback.`,
+  );
+  return new Date().toISOString().slice(0, 10);
+}
+
 function normalizeForEngine(tx: any, index: number): Record<string, any> {
   const amount =
     typeof tx.amount === "number"
@@ -65,9 +118,8 @@ function normalizeForEngine(tx: any, index: number): Record<string, any> {
   const rawType = tx.type ?? tx.source ?? "";
   return {
     transaction_id: tx.id ?? `manual-${index}`,
-    date: tx.date ?? new Date().toISOString().slice(0, 10),
+    date: parseDate(tx.date), // ← was: tx.date ?? new Date()...
     branch: tx.branch ?? "Main",
-    // Preserve the original type string meaning rather than guessing from sign alone
     type: classifyType(rawType, amount),
     account_name: tx.account_name ?? "Manual Upload",
     category_name: tx.category ?? tx.category_name ?? "Uncategorized",

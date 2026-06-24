@@ -318,7 +318,7 @@ export default function PricingPage() {
                       >
                         Connect your Avalanche wallet to pay using USDC.
                       </p>
-                      <div className="w-full flex justify-center scale-95 origin-center">
+                      <div className="flex justify-center scale-95 origin-center border-2 border-black p-1 rounded-lg">
                         <ConnectButton client={client} chain={activeChain} />
                       </div>
                       <TransactionButton

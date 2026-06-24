@@ -11,7 +11,6 @@ import FlagFeed from "../../frontend/components/FlagFeed";
 import ActionPlan from "../../frontend/components/ActionPlan";
 import EvidencePanel from "./components/EvidencePanel";
 import ZohoConnectBanner from "../../frontend/components/ZohoConnectBanner";
-import CsvUploader from "../../frontend/components/CsvUploader";
 
 const SEVERITY_RANK = { high: 3, medium: 2, low: 1 } as const;
 
@@ -74,42 +73,14 @@ export default function BusinessDashboard() {
       await load(true);
     } catch (err) {
       setUiNotification(
-        err instanceof Error ? err.message : "An error occurred while disconnecting."
+        err instanceof Error
+          ? err.message
+          : "An error occurred while disconnecting.",
       );
     } finally {
       setDisconnecting(false);
     }
   }
-
-  const handleCsvParsed = async (csvData: any[]) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/business/${slug}/ingest`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transactions: csvData }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error ?? "Ingestion failed.");
-      }
-
-      if (result.success) {
-        setData((prev: any) => ({
-          ...prev,
-          report: result.report,
-          hasTransactions: true,
-        }));
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to process analysis.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (loading) {
     return <Loader fullPage label="Loading your monthly risk report..." />;
@@ -133,7 +104,7 @@ export default function BusinessDashboard() {
   const isEmpty = !zohoConnected && !data.hasTransactions;
 
   const sortedFlags = [...(data.report?.flags || [])].sort(
-    (a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity]
+    (a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity],
   );
 
   const BackNavigationButton = () => (
@@ -185,8 +156,8 @@ export default function BusinessDashboard() {
             style={{ color: "var(--ink)", opacity: 0.8 }}
           >
             This will sever the live synchronization pipeline. Historical
-            transaction records retrieved from Zoho Books will be cleared from
-            your ledger metrics view.
+            transaction records retrieved from Zoho Books will be cleared
+            from your ledger metrics view.
           </p>
           <div className="mt-4 flex gap-3">
             <button
@@ -227,106 +198,66 @@ export default function BusinessDashboard() {
     </div>
   );
 
-  // VIEW STATE A: Choice screen
+  // VIEW STATE A: Empty state — no data yet
   if (isEmpty) {
     return (
       <div className="space-y-5">
         <BackNavigationButton />
         <ZohoConnectBanner slug={slug} />
-        <IntegrationManagementBlock />
-        <VerdictBand report={data.report} trend={data.trend} />
 
         <div
-          className="rounded-[var(--radius-lg)] border p-6 sm:p-8"
+          className="rounded-[var(--radius-lg)] border p-8 sm:p-10 text-center"
           style={{ borderColor: "var(--line)", background: "white" }}
         >
           <p
-            className="font-display text-lg font-bold text-center"
+            className="text-xs font-bold uppercase tracking-[0.18em]"
+            style={{ color: "var(--savanna)" }}
+          >
+            No data yet
+          </p>
+          <h2
+            className="font-display mt-2 text-2xl font-bold"
             style={{ color: "var(--ink)" }}
           >
-            No transactions or files evaluated yet
-          </p>
+            Upload your first financial statement
+          </h2>
           <p
-            className="mx-auto mt-2 max-w-md text-sm leading-6 text-center"
+            className="mx-auto mt-3 max-w-md text-sm leading-6"
             style={{ color: "var(--sage)" }}
           >
-            Connect this business's Zoho Books account above, or upload a
-            statement below to start the analysis.
+            Dohtective analyses your M-Pesa statements, bank statements, and
+            CSV exports to catch financial risks before they become problems.
+            Upload your files, then run analysis — it takes under a minute.
           </p>
 
-          <div className="mt-8 grid gap-6 sm:grid-cols-2 max-w-2xl mx-auto">
-            {/* Path A — Zoho */}
-            <div
-              className="rounded-[var(--radius-md)] border p-5 text-center"
-              style={{ borderColor: "var(--line)", background: "var(--bone)" }}
-            >
-              <p
-                className="text-xs font-bold uppercase tracking-widest"
-                style={{ color: "var(--savanna)" }}
-              >
-                Path A — Automated
-              </p>
-              <p
-                className="mt-1 text-sm font-semibold"
-                style={{ color: "var(--ink)" }}
-              >
-                Connect Zoho Books
-              </p>
-              <p
-                className="mt-1 text-xs leading-5"
-                style={{ color: "var(--sage)" }}
-              >
-                Real-time sync via OAuth. Transactions pull automatically each
-                time you load this dashboard.
-              </p>
-              <button
-                onClick={() => router.push(`/api/zoho/oauth/start?slug=${slug}`)}
-                className="mt-4 inline-block font-display text-xs font-bold uppercase tracking-[0.06em] text-white px-4 py-2.5 rounded-[var(--radius-md)] transition hover:opacity-90"
-                style={{ background: "var(--savanna)" }}
-              >
-                Connect Zoho
-              </button>
-            </div>
-
-            {/* Path B — Manual */}
-            <div
-              className="rounded-[var(--radius-md)] border p-5"
-              style={{ borderColor: "var(--line)", background: "var(--bone)" }}
-            >
-              <p
-                className="text-xs font-bold uppercase tracking-widest"
-                style={{ color: "var(--savanna)" }}
-              >
-                Path B — Manual Upload
-              </p>
-              <p
-                className="mt-1 text-sm font-semibold"
-                style={{ color: "var(--ink)" }}
-              >
-                Upload a Statement
-              </p>
-              <p
-                className="mt-1 text-xs leading-5"
-                style={{ color: "var(--sage)" }}
-              >
-                M-Pesa, bank statement, or any CSV. The engine runs the same
-                analysis either way.
-              </p>
-              <div className="mt-4">
-                <CsvUploader onDataParsed={handleCsvParsed} />
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6 text-center">
+          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
               onClick={() => router.push(`/business/${slug}/documents`)}
-              className="text-xs font-semibold underline underline-offset-2"
-              style={{ color: "var(--sage)" }}
+              className="font-display w-full sm:w-auto rounded-[var(--radius-md)] px-6 py-3.5 text-sm font-bold uppercase tracking-[0.06em] text-white transition hover:opacity-90"
+              style={{ background: "var(--savanna)" }}
             >
-              Add supporting documents instead
+              Upload your first statement →
+            </button>
+            <button
+              onClick={() => {
+                window.location.href = `/api/zoho/oauth/start?slug=${slug}`;
+              }}
+              className="font-display w-full sm:w-auto rounded-[var(--radius-md)] border px-6 py-3.5 text-sm font-bold uppercase tracking-[0.06em] transition hover:opacity-80"
+              style={{
+                borderColor: "var(--line)",
+                color: "var(--ink)",
+                background: "white",
+              }}
+            >
+              Connect Zoho Books instead
             </button>
           </div>
+
+          <p className="mt-6 text-xs" style={{ color: "var(--sage)" }}>
+            You can upload as many files as you want — weekly, daily, or
+            whenever you have new data. Each upload is stored and combined
+            when you run analysis.
+          </p>
         </div>
       </div>
     );
@@ -345,6 +276,8 @@ export default function BusinessDashboard() {
           <MixedFundsSpotlight report={data.report} />
           <FlagFeed
             flags={sortedFlags}
+            slug={slug}
+            flagResponses={data.flagResponses ?? {}}
             initialVisibleCount={3}
             title="What needs your eyes"
           />
@@ -353,33 +286,97 @@ export default function BusinessDashboard() {
         </>
       )}
 
+      {/* Data source information block — explains both paths clearly
+          and lets the user act without leaving the dashboard */}
       <div
-        className="rounded-[var(--radius-lg)] border p-5"
-        style={{ borderColor: "var(--line)", background: "var(--bone-dim)" }}
+        className="rounded-[var(--radius-lg)] border p-6"
+        style={{ borderColor: "var(--line)", background: "white" }}
       >
         <p
-          className="text-sm font-semibold mb-3"
+          className="text-xs font-bold uppercase tracking-[0.18em]"
+          style={{ color: "var(--savanna)" }}
+        >
+          How Dohtective gets your data
+        </p>
+        <h3
+          className="font-display mt-1.5 text-base font-bold"
           style={{ color: "var(--ink)" }}
         >
-          Re-run analysis with updated data
-        </p>
-        <CsvUploader onDataParsed={handleCsvParsed} />
-      </div>
+          Two ways to keep your analysis current
+        </h3>
 
-      <div
-        className="rounded-[var(--radius-lg)] border p-5 text-center"
-        style={{ borderColor: "var(--line)", background: "var(--bone-dim)" }}
-      >
-        <p className="text-sm" style={{ color: "var(--sage)" }}>
-          Want sharper, compliance-aware detection?{" "}
-          <button
-            onClick={() => router.push(`/business/${slug}/documents`)}
-            className="font-semibold underline underline-offset-2"
-            style={{ color: "var(--savanna)" }}
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {/* Zoho path */}
+          <div
+            className="rounded-[var(--radius-md)] border p-4"
+            style={{ borderColor: "var(--line)", background: "var(--bone)" }}
           >
-            Add supporting documents
-          </button>
-        </p>
+            <p
+              className="text-xs font-bold uppercase tracking-wider"
+              style={{ color: "var(--savanna)" }}
+            >
+              Automated — Zoho Books
+            </p>
+            <p
+              className="mt-1.5 text-xs leading-5"
+              style={{ color: "var(--sage)" }}
+            >
+              Connect your Zoho Books account and Dohtective pulls your
+              transactions automatically every time you load this dashboard.
+              No manual uploads needed.
+            </p>
+            {zohoConnected ? (
+              <p
+                className="mt-2 text-xs font-semibold"
+                style={{ color: "var(--savanna)" }}
+              >
+                ✓ Connected
+              </p>
+            ) : (
+              <button
+                onClick={() => {
+                  window.location.href = `/api/zoho/oauth/start?slug=${slug}`;
+                }}
+                className="mt-3 font-display text-xs font-bold uppercase tracking-[0.06em] text-white px-3 py-1.5 rounded-[var(--radius-md)] transition hover:opacity-90"
+                style={{ background: "var(--savanna)" }}
+              >
+                Connect Zoho
+              </button>
+            )}
+          </div>
+
+          {/* Manual path */}
+          <div
+            className="rounded-[var(--radius-md)] border p-4"
+            style={{ borderColor: "var(--line)", background: "var(--bone)" }}
+          >
+            <p
+              className="text-xs font-bold uppercase tracking-wider"
+              style={{ color: "var(--ink)" }}
+            >
+              Manual — Statements & Exports
+            </p>
+            <p
+              className="mt-1.5 text-xs leading-5"
+              style={{ color: "var(--sage)" }}
+            >
+              Upload M-Pesa statements, bank statements, or CSV exports
+              whenever you have new data — daily, weekly, or monthly. All
+              files are stored and combined when you run analysis.
+            </p>
+            <button
+              onClick={() => router.push(`/business/${slug}/documents`)}
+              className="mt-3 font-display text-xs font-bold uppercase tracking-[0.06em] px-3 py-1.5 rounded-[var(--radius-md)] border transition hover:opacity-80"
+              style={{
+                borderColor: "var(--line)",
+                color: "var(--ink)",
+                background: "white",
+              }}
+            >
+              Manage your files →
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "../../lib/prisma";
 import { requireBusinessMember, UnauthorizedError } from "../../lib/authz";
 
-const DETECTION_SERVICE_URL = process.env.DETECTION_SERVICE_URL ?? "http://localhost:8123";
+const DETECTION_SERVICE_URL =
+  process.env.DETECTION_SERVICE_URL ?? "http://localhost:8123";
 
 export async function GET(req: Request) {
   const orgParam = new URL(req.url).searchParams.get("org");
@@ -20,11 +21,19 @@ export async function GET(req: Request) {
     throw err;
   }
 
-  const [transactions, invoices, bankStatements] = await Promise.all([
-    prisma.transaction.findMany({ where: { businessId: business.id } }),
-    prisma.invoice.findMany({ where: { businessId: business.id } }),
-    prisma.bankStatement.findMany({ where: { businessId: business.id } }),
-  ]);
+  const [transactions, invoices, bankStatements, flagResponses] =
+    await Promise.all([
+      prisma.transaction.findMany({ where: { businessId: business.id } }),
+      prisma.invoice.findMany({ where: { businessId: business.id } }),
+      prisma.bankStatement.findMany({ where: { businessId: business.id } }),
+      // Load all existing founder responses for this business so the
+      // dashboard can render the correct response state per flag without
+      // an extra round-trip.
+      prisma.flagResponse.findMany({
+        where: { businessId: business.id },
+        select: { flagTitle: true, response: true, respondedAt: true },
+      }),
+    ]);
 
   const shapedTransactions = transactions.map((t) => ({
     transaction_id: t.transactionId,
@@ -156,21 +165,32 @@ export async function GET(req: Request) {
           "Not enough history yet — trends appear after your second month.",
       };
 
+  // Shape flag responses as a lookup map keyed by flagTitle so the
+  // frontend can do O(1) lookups per flag without iterating the array.
+  const flagResponseMap: { [key: string]: { response: string; respondedAt: string } } = {};
+  for (const fr of flagResponses) {
+    flagResponseMap[fr.flagTitle] = {
+      response: fr.response,
+      respondedAt: fr.respondedAt.toISOString(),
+    };
+  }
+
   return NextResponse.json({
     meta: {
       company_name: business.companyName,
       period_start:
         shapedTransactions[0]?.date ?? now.toISOString().slice(0, 10),
       period_end: now.toISOString().slice(0, 10),
-      branches: Array.from(new Set(shapedTransactions.map((t) => t.branch))),
+      branches: Array.from(
+        new Set(shapedTransactions.map((t) => t.branch))
+      ),
       currency: business.currency,
     },
     transactions: shapedTransactions,
     report,
     trend,
-    // The dashboard uses this — not flag count — to decide whether to show
-    // the choice screen. A business with transactions but zero anomalies
-    // should show the populated view, not the empty state.
     hasTransactions: transactions.length > 0,
+    // Keyed by flagTitle — O(1) lookup in FlagFeed per flag card
+    flagResponses: flagResponseMap,
   });
 }

@@ -54,56 +54,42 @@ _INFLOW_TYPES: Set[str] = {
 
 # Type strings that represent money going OUT of the business.
 _OUTFLOW_TYPES: Set[str] = {
-    "expense",
-    "supplier",
-    "operating",
-    "owner",
-    "pettycash",
-    "petty cash",
-    "logistics",
-    "services",
-    "misc",
-    "utility",
-    "utilities",
-    "bill",
-    "cost",
-    "payment",
-    "stock",
-    "rent",
-    "salary",
-    "salaries",
-    "payroll",
-    "tax",
-    "transfer",
-    "withdrawal",
-    "draw",
+    "expense", "supplier", "operating", "owner", "owner draw", "pettycash",
+    "petty cash", "logistics", "services", "misc", "utility", "utilities",
+    "bill", "cost", "payment", "stock", "rent", "salary", "salaries",
+    "payroll", "tax", "transfer", "withdrawal", "draw",
+    "non-reimbursable", "reimbursable", "fuel", "purchase", "inventory",
+    "equipment", "maintenance", "repairs", "insurance", "subscription",
+    "software", "hardware", "shipping", "freight", "customs", "duty",
 }
 
 
+
 def _classify_transaction(tx: Transaction) -> str:
-    """
-    Returns "income", "expense", or "unknown".
+    """Returns 'income', 'expense', or 'unknown'."""
+    raw_type = str(tx.get("type") or "").strip()
 
-    Resolution order:
-      1. Normalise the type field and check against known inflow/outflow sets.
-      2. If type is unrecognised, fall back to amount sign
-         (positive = income, negative = expense).
-      3. If neither resolves, return "unknown" — caller skips the row.
-    """
-    raw_type = str(tx.get("type") or "").strip().lower().replace("-", " ")
-
-    if raw_type in _INFLOW_TYPES:
+    # Trust the extractor's canonical classification first
+    if raw_type == "Income":
         return "income"
-    if raw_type in _OUTFLOW_TYPES:
+    if raw_type == "Expense":
         return "expense"
 
-    # Sign-based fallback for unrecognised type strings.
-    # normalizeForEngine sets amount to Math.abs(), so sign is lost by the
-    # time it reaches here for ingest-route uploads. This fallback is more
-    # useful for direct Zoho data where the original sign may be preserved.
+    normalised = raw_type.lower().replace("-", " ")
+    if normalised in _INFLOW_TYPES:
+        return "income"
+    if normalised in _OUTFLOW_TYPES:
+        return "expense"
+
+    # Substring inference for unstructured category values
+    if any(kw in normalised for kw in ("sale", "revenue", "receipt", "income", "payment received")):
+        return "income"
+    if any(kw in normalised for kw in ("draw", "withdrawal", "expense", "cost", "purchase",
+                                        "supply", "stock", "rent", "salary", "wage", "fee",
+                                        "utility", "loan", "repay")):
+        return "expense"
+
     amount = _safe_amount(tx)
-    if amount > 0:
-        return "income"   # ambiguous but better than dropping the row
     if amount < 0:
         return "expense"
 
@@ -115,18 +101,21 @@ def calculate_cash_buffer(
     starting_balance: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Estimates cash runway in days from the trailing period's net burn rate."""
-    transactions = transactions_with_valid_dates(transactions)
+    valid_transactions = transactions_with_valid_dates(transactions)
 
-    if not transactions:
+    if not valid_transactions:
         return {
             "total_in": 0,
             "total_out": 0,
-            "buffer_days": 0,
+            "buffer_days": None,
             "risk_level": "unknown",
             "used_fallback_starting_balance": starting_balance is None,
+            "cannot_compute": True,
             "limitation_note": (
-                "No transactions with a parsable date in the period — "
-                "cannot estimate cash buffer."
+                "We could not estimate your cash buffer because no transactions "
+                "with readable dates were found. This usually means the date "
+                "column in your file uses an unrecognised format. Try exporting "
+                "your file with dates in DD/MM/YYYY or YYYY-MM-DD format."
             ),
         }
 
@@ -134,7 +123,7 @@ def calculate_cash_buffer(
     outflows = 0.0
     unclassified_count = 0
 
-    for tx in transactions:
+    for tx in valid_transactions:
         classification = _classify_transaction(tx)
         amount = _safe_amount(tx)
         if classification == "income":
@@ -144,8 +133,27 @@ def calculate_cash_buffer(
         else:
             unclassified_count += 1
 
+    # If everything is unclassified, be honest rather than returning nonsense
+    if inflows == 0 and outflows == 0:
+        return {
+            "total_in": 0,
+            "total_out": 0,
+            "buffer_days": None,
+            "risk_level": "unknown",
+            "used_fallback_starting_balance": starting_balance is None,
+            "cannot_compute": True,
+            "limitation_note": (
+                f"We could not separate income from expenses in your file "
+                f"({len(valid_transactions)} transactions were found but none "
+                f"could be classified as income or expense). This usually happens "
+                f"when the file has no 'type', 'category', 'debit', or 'credit' "
+                f"column. Add a column to your spreadsheet indicating whether "
+                f"each row is income or an expense and re-upload."
+            ),
+        }
+
     dated = sorted(
-        transactions,
+        valid_transactions,
         key=lambda tx: parse_date(tx.get("date")) or _DATE_FALLBACK,
     )
     first_date = parse_date(dated[0]["date"]) or _DATE_FALLBACK
@@ -169,10 +177,25 @@ def calculate_cash_buffer(
 
     if net_burn_per_day > 0:
         buffer_days = round(available_cash / net_burn_per_day)
-    else:
-        # Genuinely net cash-positive over the period — business is growing.
-        # Cap at 365 for display sanity; this is not a 9999 error case.
+    elif net_burn_per_day < 0:
+        # Net cash-positive — genuinely growing, not a bug
         buffer_days = 365
+    else:
+        # Net burn is exactly zero — unusual, be honest
+        buffer_days = None
+        return {
+            "total_in": inflows,
+            "total_out": outflows,
+            "buffer_days": None,
+            "risk_level": "unknown",
+            "used_fallback_starting_balance": used_fallback,
+            "cannot_compute": True,
+            "limitation_note": (
+                "Income and expenses are exactly equal over this period — "
+                "the cash buffer cannot be meaningfully estimated. "
+                "Upload more data or a longer period for a useful reading."
+            ),
+        }
 
     risk_level = (
         "high" if buffer_days < 14
@@ -181,20 +204,20 @@ def calculate_cash_buffer(
     )
 
     note_parts = [
-        f"This is a trailing-burn estimate based on the last {period_days} days, "
-        "not a forward-looking model. It can't see a large payment due next week "
-        "that hasn't happened yet."
+        f"Based on the last {period_days} days of data. "
+        "This is a trailing estimate — it cannot predict a large payment "
+        "due next week that hasn't happened yet."
     ]
     if used_fallback:
         note_parts.append(
-            f"No starting cash balance was supplied in the data; "
-            f"a placeholder of KES {DEFAULT_STARTING_BALANCE:,} was assumed — "
-            f"treat buffer_days as illustrative until a real opening balance is provided."
+            f"No opening balance was found in your file — "
+            f"KES {DEFAULT_STARTING_BALANCE:,} was assumed as a starting point. "
+            f"For a more accurate reading, add your opening cash balance to your file."
         )
     if unclassified_count:
         note_parts.append(
-            f"{unclassified_count} transaction(s) had unrecognised type values "
-            f"and were excluded from the cash flow calculation."
+            f"{unclassified_count} transaction(s) could not be classified as "
+            f"income or expense and were excluded from this calculation."
         )
 
     return {
@@ -203,5 +226,6 @@ def calculate_cash_buffer(
         "buffer_days": min(buffer_days, 365),
         "risk_level": risk_level,
         "used_fallback_starting_balance": used_fallback,
+        "cannot_compute": False,
         "limitation_note": " ".join(note_parts),
     }

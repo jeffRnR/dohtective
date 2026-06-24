@@ -1,11 +1,3 @@
-// prisma/schema.prisma
-// Multitenant data model. The tenant boundary is BUSINESS, not User —
-// per the explicit design decision: a business profile can have multiple
-// users (founder, accountant, reviewer) attached via BusinessMember, and
-// a user only ever sees businesses they're an explicit member of. There
-// is no "user owns business" relationship — only "user is a member of
-// business, with a role."
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,30 +6,23 @@ datasource db {
   provider = "postgresql"
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// AUTH — shapes required by @auth/prisma-adapter (NextAuth v5/Auth.js).
-// Field names and structure here follow the adapter's required schema
-// exactly; deviating from this breaks NextAuth's session handling.
-// ─────────────────────────────────────────────────────────────────────
-
 model User {
   id            String    @id @default(cuid())
   name          String?
   email         String?   @unique
   emailVerified DateTime?
   image         String?
-  passwordHash  String? // null for Google-only accounts; set for Credentials sign-up
+  passwordHash  String?
 
   accounts Account[]
   sessions Session[]
 
-  memberships BusinessMember[]
-  sentInvites BusinessInvite[] @relation("InvitedBy")
-
-  createdAt        DateTime                @default(now())
-  updatedAt        DateTime                @updatedAt
-  //googleSheetsConnection GoogleSheetsConnection?
+  memberships      BusinessMember[]
+  sentInvites      BusinessInvite[]        @relation("InvitedBy")
   sheetsConnection GoogleSheetsConnection?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Account {
@@ -76,31 +61,12 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// TENANCY — Business is the real tenant boundary, not User.
-// ─────────────────────────────────────────────────────────────────────
-
 enum BusinessRole {
   founder
   accountant
   reviewer
 }
 
-// One row per business per analysis run. This is the foundation for
-// "advisor, not just detector" -- without persisted history, the system
-// can only describe a single point in time ("23 days of buffer") and can
-// never say "down from 31 last month," never know a flag already existed
-// and was addressed, never show a trend. Every other advisor-grade
-// feature (cross-flag synthesis, the founder feedback loop, trend-aware
-// risk scoring) depends on this existing first.
-//
-// Deliberately denormalized: cashBufferDays, flagsJson etc. are stored
-// as a snapshot of engine.py's output AT THE TIME OF THE RUN, not
-// references back to live Transaction rows. This is intentional -- a
-// trend needs to compare what the system SAID at each point in time,
-// which must stay stable even if transactions are later edited, deleted,
-// or reclassified. A snapshot that silently changed when underlying data
-// changed would make trend comparisons meaningless.
 model ReportSnapshot {
   id         String @id @default(cuid())
   businessId String
@@ -111,13 +77,8 @@ model ReportSnapshot {
   totalCashOutflows   Float
   mixedFundsCount     Int
   mixedFundsTotal     Float
-
-  // Full flags array and plain-language summary, stored as JSON so the
-  // snapshot is self-contained -- a year from now, this row alone (with
-  // no live transaction data) can still answer "what did we tell this
-  // founder in March."
-  flagsJson         Json
-  plainLanguageJson Json
+  flagsJson           Json
+  plainLanguageJson   Json
 
   generatedAt DateTime @default(now())
 
@@ -141,14 +102,13 @@ model Business {
   documents       SupportingDocument[]
   zohoConnection  ZohoConnection?
   reportSnapshots ReportSnapshot[]
+  uploadedFiles   UploadedFile[]
+  flagResponses   FlagResponse[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// Join table: who can see this business, and in what capacity. This is
-// the actual access-control gate — every API route must check for a
-// BusinessMember row before returning any data for a given business.
 model BusinessMember {
   id         String       @id @default(cuid())
   businessId String
@@ -163,12 +123,6 @@ model BusinessMember {
   @@unique([businessId, userId])
 }
 
-// CHANGELOG: structure built now, sending NOT implemented yet (per
-// explicit instruction — "don't build anything yet, just make a
-// structure that works"). An invite is a pending membership: created by
-// an existing member, matched against a User by email at sign-up/sign-in
-// time, NOT sent as a real email yet. See lib/invites.ts for the no-op
-// send function this points at.
 model BusinessInvite {
   id          String       @id @default(cuid())
   businessId  String
@@ -186,20 +140,49 @@ model BusinessInvite {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// FINANCIAL DATA — migrated from flat JSON (mock-data/*.json) to real
-// rows, scoped to a Business via foreign key. Field names mirror
-// ZohoTransaction/ZohoInvoice/ZohoBankStatement from the TS types and
-// backend/engine.py's expectations, so the detection engine's input
-// shape doesn't need to change — only where the data comes from.
+// FLAG RESPONSES — founder feedback on individual flags.
+// Keyed on (businessId, flagTitle) because flags don't have stable IDs
+// across engine runs — the title is the only stable identifier.
+// One row per flag per business, upserted on every response change.
 // ─────────────────────────────────────────────────────────────────────
+model FlagResponse {
+  id           String @id @default(cuid())
+  businessId   String
+  flagTitle    String // matches FlagItem.title exactly
+  response     String // 'already_handled' | 'intentional' | 'need_help'
+  respondedAt  DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, flagTitle])
+  @@index([businessId])
+}
+
+model UploadedFile {
+  id         String @id @default(cuid())
+  businessId String
+
+  filename   String
+  fileKind   String
+  rowCount   Int
+  dateFrom   String?
+  dateTo     String?
+  uploadedAt DateTime @default(now())
+
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([businessId])
+}
 
 model Transaction {
   id              String   @id @default(cuid())
   businessId      String
-  transactionId   String // Zoho's own ID or a generated one — kept separate from our cuid `id`
+  transactionId   String
   date            DateTime
   branch          String
-  type            String // "Income" | "Expense"
+  type            String
   accountName     String
   categoryName    String
   contactName     String
@@ -212,12 +195,16 @@ model Transaction {
   isReconciled    Boolean  @default(false)
   notes           String   @default("")
 
+  sourceFileId String?
+  sourceFile   UploadedFile? @relation(fields: [sourceFileId], references: [id], onDelete: SetNull)
+
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
   @@unique([businessId, transactionId])
   @@index([businessId])
+  @@index([sourceFileId])
 }
 
 model Invoice {
@@ -256,10 +243,6 @@ model BankStatement {
   @@index([businessId])
 }
 
-// Uploaded compliance/supporting documents — receipt, bank_statement,
-// etims, kra_pin, business_registration. Mirrors ExtractedDocument from
-// python-service/models.py; stores the extraction RESULT, not the file
-// itself (file storage is a separate concern — see note in lib/storage).
 model SupportingDocument {
   id               String @id @default(cuid())
   businessId       String
@@ -278,9 +261,6 @@ model SupportingDocument {
   @@index([businessId])
 }
 
-// One-to-one with Business — replaces mock-data/zoho-tokens.json's flat
-// file store. refreshToken should be encrypted at rest before production
-// (see app/lib/zoho-client.ts's existing honesty note about this).
 model ZohoConnection {
   id             String  @id @default(cuid())
   businessId     String  @unique
@@ -296,8 +276,8 @@ model ZohoConnection {
 model GoogleSheetsConnection {
   id           String @id @default(cuid())
   userId       String @unique
-  refreshToken String @db.Text // encrypt at rest before production — same note as ZohoConnection
-  email        String // Google account email that authorized Sheets access
+  refreshToken String @db.Text
+  email        String
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

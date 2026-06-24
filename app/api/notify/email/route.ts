@@ -102,7 +102,7 @@ function buildEmailHtml(payload: EmailPayload, founderName: string): string {
           <td style="padding:32px 36px 0;">
             <p style="margin:0 0 8px;font-size:15px;color:#1a1a1a;">Hi ${founderName},</p>
             <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#444;">
-              Your monthly financial review is ready. There ${actionItems.length === 1 ? "is" : "are"}
+              Your financial review is ready. There ${actionItems.length === 1 ? "is" : "are"}
               <strong>${actionItems.length} item${actionItems.length === 1 ? "" : "s"}</strong>
               that need${actionItems.length === 1 ? "s" : ""} attention — sorted below by priority.
               ${

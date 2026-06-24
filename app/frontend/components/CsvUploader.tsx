@@ -4,14 +4,10 @@ import { useState } from "react";
 import Papa from "papaparse";
 import type { NormalizedTransaction } from "../lib/types";
 
-// M-Pesa exports use "Paid In" for credits and "Withdrawn" for debits
-// instead of a single signed "Amount" column. Detect and handle both.
 function parseAmount(row: any): number {
   if (row["Paid In"] !== undefined || row["Withdrawn"] !== undefined) {
     const paidIn = parseFloat(String(row["Paid In"] ?? "0").replace(/,/g, "")) || 0;
     const withdrawn = parseFloat(String(row["Withdrawn"] ?? "0").replace(/,/g, "")) || 0;
-    // Withdrawals are outflows — represent as negative so normalizeForEngine
-    // can infer type from sign
     return paidIn > 0 ? paidIn : -withdrawn;
   }
   const raw = row.Amount ?? row.amount ?? row.Total ?? row.total ?? "0";
@@ -28,7 +24,6 @@ function parseDate(row: any): string {
     row["Value Date"] ??
     "";
   if (!raw) return new Date().toISOString().slice(0, 10);
-  // Try to parse; fall back to raw string if it's already YYYY-MM-DD
   const d = new Date(raw);
   return isNaN(d.getTime()) ? String(raw) : d.toISOString().slice(0, 10);
 }
@@ -46,26 +41,58 @@ function parseDescription(row: any): string {
 }
 
 function parseVendor(row: any): string {
-  return row.Vendor ?? row.vendor ?? row.Payee ?? row.payee ?? row["Contact Name"] ?? "Unknown";
+  return (
+    row.Vendor ?? row.vendor ?? row.Payee ?? row.payee ?? row["Contact Name"] ?? "Unknown"
+  );
 }
 
 export default function CsvUploader({
   onDataParsed,
+  slug,
 }: {
   onDataParsed: (data: NormalizedTransaction[]) => void;
+  // slug is needed for the PDF extraction API route.
+  // Optional so existing usages without slug don't break — PDF upload
+  // will show an error if slug is missing.
+  slug?: string;
 }) {
   const [parsing, setParsing] = useState(false);
   const [parsed, setParsed] = useState<{ filename: string; rowCount: number } | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function handlePdf(file: File) {
+    if (!slug) {
+      setParseError('Cannot extract PDF without a business context.');
+      setParsing(false);
+      return;
+    }
 
-    setParsing(true);
-    setParseError(null);
-    setParsed(null);
+    const formData = new FormData();
+    formData.append('file', file);
 
+    try {
+      const res = await fetch(`/api/business/${slug}/extract-pdf`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result.error ?? 'PDF extraction failed.');
+      }
+
+      const transactions: NormalizedTransaction[] = result.transactions;
+      setParsed({ filename: file.name, rowCount: transactions.length });
+      onDataParsed(transactions);
+    } catch (err) {
+      setParseError(err instanceof Error ? err.message : 'PDF extraction failed.');
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  function handleCsv(file: File) {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
@@ -83,12 +110,11 @@ export default function CsvUploader({
               raw: row,
             })
           );
-
           setParsed({ filename: file.name, rowCount: normalized.length });
           onDataParsed(normalized);
         } catch (err) {
           setParseError(
-            err instanceof Error ? err.message : "Failed to parse file."
+            err instanceof Error ? err.message : "Failed to parse CSV."
           );
         } finally {
           setParsing(false);
@@ -99,8 +125,22 @@ export default function CsvUploader({
         setParsing(false);
       },
     });
+  }
 
-    // Reset input so the same file can be re-uploaded if needed
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setParsing(true);
+    setParseError(null);
+    setParsed(null);
+
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      handlePdf(file);
+    } else {
+      handleCsv(file);
+    }
+
     e.target.value = "";
   };
 
@@ -111,12 +151,13 @@ export default function CsvUploader({
     >
       {parsing ? (
         <p className="text-sm" style={{ color: "var(--sage)" }}>
-          Parsing file...
+          {/* Message differs so the user knows PDF takes longer */}
+          Extracting transactions... this may take a moment for PDFs.
         </p>
       ) : parsed ? (
         <div className="space-y-2">
           <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
-            {parsed.rowCount} rows loaded from{" "}
+            {parsed.rowCount} transactions loaded from{" "}
             <span className="font-mono text-xs">{parsed.filename}</span>
           </p>
           <p className="text-xs" style={{ color: "var(--sage)" }}>
@@ -129,7 +170,7 @@ export default function CsvUploader({
             Upload a different file
             <input
               type="file"
-              accept=".csv"
+              accept=".csv,.pdf"
               onChange={handleFileUpload}
               className="sr-only"
             />
@@ -146,13 +187,13 @@ export default function CsvUploader({
             </span>
             <input
               type="file"
-              accept=".csv"
+              accept=".csv,.pdf"
               onChange={handleFileUpload}
               className="sr-only"
             />
           </label>
           <p className="mt-2 text-xs" style={{ color: "var(--sage)" }}>
-            M-Pesa statement, bank CSV, or any transaction export
+            M-Pesa statement, bank statement, or CSV — PDF and CSV supported
           </p>
         </>
       )}
