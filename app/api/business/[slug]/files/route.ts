@@ -1,28 +1,24 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import fs from 'fs';
-import path from 'path';
-import { NextResponse } from 'next/server';
-import { prisma } from '../../../../lib/prisma';
-import { requireBusinessMember, UnauthorizedError } from '../../../../lib/authz';
-import { normalizeForEngine } from '../../../../lib/normalize-transaction';
+import { NextResponse } from "next/server";
+import { prisma } from "../../../../lib/prisma";
+import {
+  requireBusinessMember,
+  UnauthorizedError,
+} from "../../../../lib/authz";
+import { normalizeForEngine } from "../../../../lib/normalize-transaction";
 
-const execAsync = promisify(exec);
+const DETECTION_SERVICE_URL =
+  process.env.DETECTION_SERVICE_URL ?? "http://localhost:8123";
 
 function detectFileKind(filename: string, mimetype: string): string {
   const lower = filename.toLowerCase();
-  if (lower.includes('mpesa') || lower.includes('m-pesa')) return 'mpesa';
-  if (lower.includes('bank') || lower.includes('statement')) return 'bank_statement';
-  if (mimetype === 'application/pdf') return 'bank_statement';
-  return 'csv';
+  if (lower.includes("mpesa") || lower.includes("m-pesa")) return "mpesa";
+  if (lower.includes("bank") || lower.includes("statement"))
+    return "bank_statement";
+  if (mimetype === "application/pdf") return "bank_statement";
+  return "csv";
 }
 
-// ── Data quality gate ──────────────────────────────────────────────────────
-// Runs on rawTransactions (before normalisation) because that's where
-// real data quality issues live. After normaliseForEngine the bad rows
-// are already silently dropped — the gate must see the original shape.
-
-type IssueLevel = 'info' | 'warning' | 'excluded';
+type IssueLevel = "info" | "warning" | "excluded";
 
 type DataQualityIssue = {
   level: IssueLevel;
@@ -41,22 +37,21 @@ function runDataQualityGate(rawTransactions: any[]): DataQualityReport {
   const total = rawTransactions.length;
   const issues: DataQualityIssue[] = [];
 
-  // Check 1 — missing or zero amount (excluded from analysis)
   const noAmount = rawTransactions.filter((tx) => {
-    const raw = tx.amount ?? tx['Paid In'] ?? tx['Withdrawn'] ?? tx.Amount ?? null;
-    if (raw === null || raw === undefined || raw === '') return true;
-    const parsed = parseFloat(String(raw).replace(/,/g, ''));
+    const raw =
+      tx.amount ?? tx["Paid In"] ?? tx["Withdrawn"] ?? tx.Amount ?? null;
+    if (raw === null || raw === undefined || raw === "") return true;
+    const parsed = parseFloat(String(raw).replace(/,/g, ""));
     return isNaN(parsed) || parsed === 0;
   });
 
   if (noAmount.length > 0) {
     issues.push({
-      level: 'excluded',
-      message: `${noAmount.length} transaction${noAmount.length === 1 ? '' : 's'} had no amount and will be excluded from analysis.`,
+      level: "excluded",
+      message: `${noAmount.length} transaction${noAmount.length === 1 ? "" : "s"} had no amount and will be excluded from analysis.`,
     });
   }
 
-  // Check 2 — unparsable or missing date (excluded from date-dependent checks)
   const DATE_FORMATS = [
     /^\d{4}-\d{2}-\d{2}$/,
     /^\d{2}\/\d{2}\/\d{4}$/,
@@ -64,54 +59,68 @@ function runDataQualityGate(rawTransactions: any[]): DataQualityReport {
     /^\d{1,2}\s+\w+\s+\d{4}$/,
   ];
   const badDate = rawTransactions.filter((tx) => {
-    const raw = tx.date ?? tx.Date ?? tx['Transaction Date'] ?? tx['Completion Time'] ?? '';
+    const raw =
+      tx.date ??
+      tx.Date ??
+      tx["Transaction Date"] ??
+      tx["Completion Time"] ??
+      "";
     if (!raw) return true;
     const d = new Date(raw);
-    return isNaN(d.getTime()) && !DATE_FORMATS.some((r) => r.test(String(raw).trim()));
+    return (
+      isNaN(d.getTime()) &&
+      !DATE_FORMATS.some((r) => r.test(String(raw).trim()))
+    );
   });
 
   if (badDate.length > 0) {
     issues.push({
-      level: 'warning',
-      message: `${badDate.length} transaction${badDate.length === 1 ? '' : 's'} had unreadable dates — today's date was used as a fallback. Consider fixing the source file for more accurate analysis.`,
+      level: "warning",
+      message: `${badDate.length} transaction${badDate.length === 1 ? "" : "s"} had unreadable dates — today's date was used as a fallback. Consider fixing the source file for more accurate analysis.`,
     });
   }
 
-  // Check 3 — missing description (info only, not excluded)
   const noDesc = rawTransactions.filter((tx) => {
     const desc =
-      tx.description ?? tx.Description ?? tx.Narration ??
-      tx.Details ?? tx.Particulars ?? tx.Remarks ?? '';
+      tx.description ??
+      tx.Description ??
+      tx.Narration ??
+      tx.Details ??
+      tx.Particulars ??
+      tx.Remarks ??
+      "";
     return !String(desc).trim();
   });
 
   if (noDesc.length > 0) {
     issues.push({
-      level: 'info',
-      message: `${noDesc.length} transaction${noDesc.length === 1 ? '' : 's'} had no description — mixed-funds detection may be less accurate for these rows.`,
+      level: "info",
+      message: `${noDesc.length} transaction${noDesc.length === 1 ? "" : "s"} had no description — mixed-funds detection may be less accurate for these rows.`,
     });
   }
 
-  // Check 4 — duplicate reference numbers within this file
   const refs = rawTransactions
-    .map((tx) => tx.id ?? tx['Receipt No.'] ?? tx['Receipt No'] ?? tx['Reference No'] ?? null)
+    .map(
+      (tx) =>
+        tx.id ??
+        tx["Receipt No."] ??
+        tx["Receipt No"] ??
+        tx["Reference No"] ??
+        null,
+    )
     .filter(Boolean);
   const uniqueRefs = new Set(refs);
   const dupCount = refs.length - uniqueRefs.size;
 
   if (dupCount > 0) {
     issues.push({
-      level: 'warning',
-      message: `${dupCount} duplicate reference number${dupCount === 1 ? '' : 's'} found within this file — these rows will be deduplicated and only the latest version kept.`,
+      level: "warning",
+      message: `${dupCount} duplicate reference number${dupCount === 1 ? "" : "s"} found within this file — these rows will be deduplicated and only the latest version kept.`,
     });
   }
 
-  // Usable = total minus hard-excluded rows (no amount)
-  // Bad-date rows are still usable (with fallback), so they're not subtracted
   const usableRows = total - noAmount.length;
   const coveragePct = total > 0 ? Math.round((usableRows / total) * 100) : 0;
-
-  // acceptable = coverage above 70% and no critical exclusions above 30%
   const acceptable = coveragePct >= 70;
 
   return {
@@ -126,7 +135,7 @@ function runDataQualityGate(rawTransactions: any[]): DataQualityReport {
 // ── GET — list all uploaded files ─────────────────────────────────────────
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ slug: string }> }
+  { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params;
 
@@ -141,12 +150,12 @@ export async function GET(
 
   const business = await prisma.business.findUnique({ where: { slug } });
   if (!business) {
-    return NextResponse.json({ error: 'Business not found.' }, { status: 404 });
+    return NextResponse.json({ error: "Business not found." }, { status: 404 });
   }
 
   const files = await prisma.uploadedFile.findMany({
     where: { businessId: business.id },
-    orderBy: { uploadedAt: 'desc' },
+    orderBy: { uploadedAt: "desc" },
     select: {
       id: true,
       filename: true,
@@ -164,7 +173,7 @@ export async function GET(
 // ── POST — upload, extract, quality gate, persist ─────────────────────────
 export async function POST(
   req: Request,
-  { params }: { params: Promise<{ slug: string }> }
+  { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params;
 
@@ -182,85 +191,67 @@ export async function POST(
   try {
     formData = await req.formData();
   } catch {
-    return NextResponse.json({ error: 'Invalid multipart/form-data.' }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid multipart/form-data." },
+      { status: 400 },
+    );
   }
 
-  const file = formData.get('file');
+  const file = formData.get("file");
   if (!file || !(file instanceof Blob)) {
-    return NextResponse.json({ error: 'Missing or invalid file.' }, { status: 400 });
+    return NextResponse.json(
+      { error: "Missing or invalid file." },
+      { status: 400 },
+    );
   }
 
-  const originalName = (file as File).name ?? 'upload';
-  const mimeType = file.type ?? '';
-  const isPdf =
-    mimeType === 'application/pdf' || originalName.toLowerCase().endsWith('.pdf');
-  const isExcel =
-    originalName.toLowerCase().endsWith('.xlsx') ||
-    originalName.toLowerCase().endsWith('.xls');
+  const originalName = (file as File).name ?? "upload";
+  const mimeType = file.type ?? "";
   const fileKind = detectFileKind(originalName, mimeType);
-  const ext = isPdf
-    ? '.pdf'
-    : isExcel
-    ? originalName.toLowerCase().endsWith('.xls') ? '.xls' : '.xlsx'
-    : '.csv';
-
-  const backendDir = path.join(process.cwd(), 'backend');
-  const tempFileName = `temp_upload_${slug}_${Date.now()}${ext}`;
-  const tempFilePath = path.join(backendDir, tempFileName);
 
   let rawTransactions: any[] = [];
 
-  try {
-    const arrayBuffer = await file.arrayBuffer();
-    fs.writeFileSync(tempFilePath, Buffer.from(arrayBuffer));
+  const extractForm = new FormData();
+  extractForm.append(
+    "file",
+    new Blob([await file.arrayBuffer()], { type: mimeType }),
+    originalName,
+  );
+  extractForm.append("document_kind", fileKind);
+  extractForm.append("slug", slug);
 
-    if (isPdf) {
-      const { stdout, stderr } = await execAsync(
-        `python extract_pdf.py ${tempFileName}`,
-        { cwd: backendDir }
-      );
-      if (!stdout || !stdout.trim()) {
-        throw new Error(
-          stderr
-            ? `PDF extractor produced no output. Stderr: ${stderr}`
-            : 'No transactions could be extracted from this PDF.'
-        );
-      }
-      rawTransactions = JSON.parse(stdout.trim());
-    } else {
-      const { stdout, stderr } = await execAsync(
-        `python extract_csv.py ${tempFileName}`,
-        { cwd: backendDir }
-      );
-      if (!stdout || !stdout.trim()) {
-        throw new Error(
-          stderr
-            ? `CSV/Excel extractor produced no output. Stderr: ${stderr}`
-            : 'No transactions could be extracted from this file.'
-        );
-      }
-      rawTransactions = JSON.parse(stdout.trim());
-    }
-  } finally {
-    if (fs.existsSync(tempFilePath)) {
-      try { fs.unlinkSync(tempFilePath); } catch {}
-    }
+  const extractRes = await fetch(
+    `${DETECTION_SERVICE_URL}/documents/extract`,
+    {
+      method: "POST",
+      body: extractForm,
+      signal: AbortSignal.timeout(60_000),
+    },
+  );
+
+  if (!extractRes.ok) {
+    const detail = await extractRes.json().catch(() => ({}));
+    return NextResponse.json(
+      { error: detail.detail ?? "Extraction failed." },
+      { status: extractRes.status },
+    );
   }
+
+  const extractData = await extractRes.json();
+  rawTransactions = extractData.transactions ?? [];
 
   if (!Array.isArray(rawTransactions) || rawTransactions.length === 0) {
     return NextResponse.json(
       {
         error:
-          'No transactions could be extracted from this file. ' +
-          'Make sure it has recognisable column headers and at least one data row.',
+          "No transactions could be extracted from this file. " +
+          "Make sure it has recognisable column headers and at least one data row.",
       },
-      { status: 422 }
+      { status: 422 },
     );
   }
 
-  // ── Run data quality gate before touching the DB ──────────────────────
   const dataQuality = runDataQualityGate(rawTransactions);
-
   const engineTransactions = rawTransactions.map(normalizeForEngine);
 
   const dates = engineTransactions.map((tx) => tx.date).sort();
@@ -323,8 +314,8 @@ export async function POST(
           notes: tx.notes,
           sourceFileId: uploadedFile.id,
         },
-      })
-    )
+      }),
+    ),
   );
 
   return NextResponse.json({
@@ -338,8 +329,6 @@ export async function POST(
       dateTo: uploadedFile.dateTo,
       uploadedAt: uploadedFile.uploadedAt,
     },
-    // Returned to the UI so it can show the data health report inline
-    // before the user runs analysis — not blocking, just informing.
     dataQuality,
   });
 }

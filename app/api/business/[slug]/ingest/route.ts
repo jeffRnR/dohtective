@@ -8,6 +8,7 @@ import {
   UnauthorizedError,
 } from "../../../../lib/authz";
 import { prisma } from "../../../../lib/prisma";
+import { consumeOneCredit, InsufficientCreditsError } from "../../../../lib/credits";
 
 const execAsync = promisify(exec);
 
@@ -53,21 +54,14 @@ function classifyType(rawType: string, amount: number): string {
   const normalised = rawType.trim().toLowerCase().replace(/-/g, " ");
   if (INFLOW_TYPES.has(normalised)) return "Income";
   if (OUTFLOW_TYPES.has(normalised)) return "Expense";
-  // Sign-based fallback for unrecognised types
   return amount >= 0 ? "Income" : "Expense";
 }
 
 function parseDate(raw: unknown): string {
-  // Catches null, undefined, empty string, whitespace-only, and unparseable formats.
-  // Returns today as a YYYY-MM-DD fallback rather than letting Invalid Date
-  // propagate to Prisma, which rejects it with a hard 500.
   if (!raw || typeof raw !== "string" || !raw.trim()) {
     return new Date().toISOString().slice(0, 10);
   }
 
-  // Handle common non-ISO formats from PDF/CSV exports:
-  //   DD/MM/YYYY  →  2024/03/15  →  2024-03-15
-  //   MM-DD-YYYY  →  03-15-2024  →  2024-03-15
   const cleaned = raw.trim();
 
   // DD/MM/YYYY or DD-MM-YYYY (most common in KE/African PDF exports)
@@ -103,7 +97,6 @@ function parseDate(raw: unknown): string {
     return fallback.toISOString().slice(0, 10);
   }
 
-  // Genuinely unparseable — log and use today so the transaction isn't lost.
   console.warn(
     `[ingest] Could not parse date "${raw}" — using today as fallback.`,
   );
@@ -118,7 +111,7 @@ function normalizeForEngine(tx: any, index: number): Record<string, any> {
   const rawType = tx.type ?? tx.source ?? "";
   return {
     transaction_id: tx.id ?? `manual-${index}`,
-    date: parseDate(tx.date), // ← was: tx.date ?? new Date()...
+    date: parseDate(tx.date),
     branch: tx.branch ?? "Main",
     type: classifyType(rawType, amount),
     account_name: tx.account_name ?? "Manual Upload",
@@ -161,6 +154,28 @@ export async function POST(
     );
   }
 
+  // ── Credit gate ────────────────────────────────────────────────────
+  // Atomically check and decrement before spending any compute.
+  // If credits = 0, returns 402 pointing founder to /pricing.
+  let creditsRemaining: number;
+  try {
+    const result = await consumeOneCredit(business.id);
+    creditsRemaining = result.creditsRemaining;
+  } catch (err) {
+    if (err instanceof InsufficientCreditsError) {
+      return Response.json(
+        {
+          error: "No analysis credits remaining.",
+          detail:
+            "Purchase more credits at /pricing to continue running analyses.",
+          creditsRemaining: 0,
+        },
+        { status: 402 },
+      );
+    }
+    throw err;
+  }
+
   const engineTransactions = rawTransactions.map(normalizeForEngine);
 
   const backendDir = path.join(process.cwd(), "backend");
@@ -190,10 +205,6 @@ export async function POST(
     }
 
     // ── Persist transactions ───────────────────────────────────────────
-    // Upsert each row so re-uploading the same file doesn't duplicate
-    // data. Keyed on [businessId, transactionId] per the schema unique
-    // constraint. Date parsing: engine transactions always have a
-    // YYYY-MM-DD string at this point — new Date() handles that cleanly.
     await Promise.all(
       engineTransactions.map((tx) =>
         prisma.transaction.upsert({
@@ -242,9 +253,6 @@ export async function POST(
     );
 
     // ── Persist report snapshot ────────────────────────────────────────
-    // Same logic as report/route.ts: one snapshot per calendar month,
-    // updated in place if one already exists this month rather than
-    // creating a second row for the same period.
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -275,13 +283,24 @@ export async function POST(
       });
     }
 
-    return Response.json({ success: true, report });
+    return Response.json({ success: true, report, creditsRemaining });
   } catch (err) {
     if (fs.existsSync(filePath)) {
       try {
         fs.unlinkSync(filePath);
       } catch {}
     }
+
+    // Engine failed after credit was consumed — refund it so the
+    // founder isn't charged for an analysis that didn't complete.
+    await prisma.business.update({
+      where: { id: business.id },
+      data: {
+        analysisCredits: { increment: 1 },
+        lifetimeCreditsUsed: { decrement: 1 },
+      },
+    });
+
     const message = err instanceof Error ? err.message : String(err);
     console.error("[Ingest] Error:", message);
     return Response.json({ error: message }, { status: 500 });

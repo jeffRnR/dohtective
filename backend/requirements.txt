@@ -1,0 +1,14 @@
+fastapi==0.138.0
+uvicorn==0.34.0
+pdfplumber==0.11.10
+pdfminer.six==20260107
+pillow==12.2.0
+pypdfium2==5.10.1
+openpyxl==3.1.5
+xlrd==2.0.2
+requests==2.34.2
+pydantic==2.13.4
+python-multipart==0.0.20
+anyio==4.14.0
+annotated-types==0.7.0
+typing_extensions==4.15.0

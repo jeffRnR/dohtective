@@ -1,4 +1,3 @@
-// /app/businesses/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -9,28 +8,21 @@ import { fetchOrgs } from "../frontend/lib/api";
 import Loader from "../frontend/components/Loader";
 import type { Org } from "../frontend/lib/types";
 
-export default function Home() {
+export default function BusinessesPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // States for handling business profile removal safely inline
   const [deletingSlug, setDeletingSlug] = useState<string | null>(null);
   const [processingDelete, setProcessingDelete] = useState(false);
 
   useEffect(() => {
-    // Real auth gate - unauthenticated visitors never see a business
-    // list at all, redirected before any data fetch happens.
     if (status === "unauthenticated") {
       router.push("/sign-in");
       return;
     }
-    if (status === "authenticated") {
-      load();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (status === "authenticated") load();
   }, [status]);
 
   async function load() {
@@ -46,24 +38,19 @@ export default function Home() {
     }
   }
 
-  // Destructive removal network engine execution 
   async function handleDelete(slug: string) {
     setProcessingDelete(true);
     setError(null);
     try {
-      const response = await fetch(`/api/business/${slug}`, {
-        method: "DELETE",
-      });
-
+      const response = await fetch(`/api/business/${slug}`, { method: "DELETE" });
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || "Could not execute organizational data reset.");
+        throw new Error(data.error || "Couldn't delete this business. Try again.");
       }
-
       setDeletingSlug(null);
-      await load(); // Hydrate current list status from the API endpoint
+      await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred");
+      setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setProcessingDelete(false);
     }
@@ -77,64 +64,82 @@ export default function Home() {
     );
   }
 
+  const firstName = session?.user?.name?.split(" ")[0] ?? null;
+  const userEmail = session?.user?.email ?? "";
+
   return (
     <div className="min-h-screen" style={{ background: "var(--bone)" }}>
-      <main className="mx-auto max-w-5xl px-5 py-16 sm:px-8">
-        {/* Navigation Branding Header */}
-        <div className="flex items-center justify-between">
+
+      {/* Nav */}
+      <div className="sticky top-0 z-10 border-b" style={{ borderColor: "var(--line)", background: "white" }}>
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-3.5 sm:px-8">
           <div className="flex items-center gap-2.5">
             <span
-              className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-sm)] font-display text-base font-bold text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] font-display text-sm font-bold text-white"
               style={{ background: "var(--ink)" }}
             >
               D
             </span>
-            <span className="font-display text-xl font-bold" style={{ color: "var(--ink)" }}>Dohtective</span>
+            <span className="font-display text-lg font-bold" style={{ color: "var(--ink)" }}>
+              Dohtective
+            </span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm" style={{ color: "var(--sage)" }}>{session?.user?.email}</span>
+          <div className="flex items-center gap-4">
+            <span className="hidden sm:block text-xs truncate max-w-[180px]" style={{ color: "var(--sage)" }}>
+              {userEmail}
+            </span>
             <button
               onClick={() => signOut({ callbackUrl: "/sign-in" })}
-              className="text-xs font-semibold uppercase tracking-[0.08em]"
+              className="text-xs font-bold uppercase tracking-[0.08em] transition hover:opacity-70"
               style={{ color: "var(--clay)" }}
             >
               Sign out
             </button>
           </div>
         </div>
+      </div>
 
-        {/* Hero Header Area */}
-        <div className="mt-12 max-w-2xl">
+      <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8">
+
+        {/* Header */}
+        <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em]" style={{ color: "var(--savanna)" }}>
-            AI Financial Controller for Kenyan SMEs
+            Your workspace
           </p>
-          <h1 className="font-display mt-2 text-4xl font-bold leading-tight sm:text-5xl" style={{ color: "var(--ink)" }}>
-            Catch the problem a month before the investor update does.
+          <h1 className="font-display mt-1.5 text-3xl font-bold sm:text-4xl" style={{ color: "var(--ink)" }}>
+            {firstName ? `Welcome back, ${firstName}.` : "Your businesses"}
           </h1>
-          <p className="mt-4 text-base leading-7" style={{ color: "var(--sage)" }}>
-            Connect Zoho Books, get a plain-language read on cash flow, mixed funds, and
-            duplicate payments - flagged the month it happens, not after.
+          <p className="mt-2 max-w-xl text-sm leading-6" style={{ color: "var(--sage)" }}>
+            Each business has its own dashboard where you can upload statements,
+            run your monthly analysis, and see what needs attention.
           </p>
         </div>
 
-        {/* Dynamic Global Custom Error Container */}
-        {error ? (
+        {/* Error */}
+        {error && (
           <div
-            className="mt-8 rounded-[var(--radius-md)] border px-5 py-4 text-sm font-medium animate-in fade-in duration-150"
+            className="mt-6 rounded-[var(--radius-md)] border px-5 py-4 text-sm font-medium"
             style={{ borderColor: "var(--clay)", background: "var(--clay-dim)", color: "var(--clay)" }}
           >
             {error}
           </div>
-        ) : null}
+        )}
 
-        {/* Safe Inline Context Destruction Confirmation Panel */}
+        {/* Delete confirmation */}
         {deletingSlug && (
-          <div 
-            className="mt-8 rounded-[var(--radius-md)] border p-5 text-left bg-white border-[var(--clay)] animate-in slide-in-from-top-2 duration-200"
+          <div
+            className="mt-6 rounded-[var(--radius-md)] border p-5 bg-white"
+            style={{ borderColor: "var(--clay)" }}
           >
-            <p className="text-sm font-bold text-[var(--ink)]">Confirm Business Removal</p>
-            <p className="mt-1 text-xs" style={{ color: "var(--sage)" }}>
-              Are you completely sure you want to disconnect and delete <span className="font-mono font-bold bg-slate-100 px-1 rounded">{deletingSlug}</span>? This cannot be undone.
+            <p className="text-sm font-bold" style={{ color: "var(--ink)" }}>
+              Delete this business?
+            </p>
+            <p className="mt-1 text-xs leading-5" style={{ color: "var(--sage)" }}>
+              This permanently removes{" "}
+              <span className="font-mono font-bold px-1 rounded" style={{ background: "var(--bone-dim)" }}>
+                {deletingSlug}
+              </span>{" "}
+              along with all its transactions, uploaded files, and reports. There's no undo.
             </p>
             <div className="mt-4 flex gap-2">
               <button
@@ -143,12 +148,12 @@ export default function Home() {
                 className="text-xs font-bold uppercase tracking-wider text-white px-4 py-2 rounded-[var(--radius-sm)] disabled:opacity-50"
                 style={{ background: "var(--clay)" }}
               >
-                {processingDelete ? "Deleting Profile..." : "Confirm Delete"}
+                {processingDelete ? "Deleting…" : "Yes, delete"}
               </button>
               <button
                 disabled={processingDelete}
                 onClick={() => setDeletingSlug(null)}
-                className="text-xs font-semibold px-4 py-2 rounded-[var(--radius-sm)] border bg-white"
+                className="text-xs font-semibold px-4 py-2 rounded-[var(--radius-sm)] border bg-white disabled:opacity-50"
                 style={{ borderColor: "var(--line)", color: "var(--ink)" }}
               >
                 Cancel
@@ -157,43 +162,69 @@ export default function Home() {
           </div>
         )}
 
-        {/* Workspace Display Board Card */}
-        <div className="mt-10 rounded-[var(--radius-lg)] border p-6 sm:p-8" style={{ borderColor: "var(--line)", background: "white" }}>
-          <div className="flex items-center justify-between">
-            <h2 className="font-display text-lg font-bold" style={{ color: "var(--ink)" }}>Your businesses</h2>
+        {/* Business list */}
+        <div
+          className="mt-8 rounded-[var(--radius-lg)] border"
+          style={{ borderColor: "var(--line)", background: "white" }}
+        >
+          <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "var(--line)" }}>
+            <div>
+              <h2 className="font-display text-base font-bold" style={{ color: "var(--ink)" }}>
+                Your businesses
+              </h2>
+              <p className="text-xs mt-0.5" style={{ color: "var(--sage)" }}>
+                {loading
+                  ? "Loading…"
+                  : orgs.length === 0
+                  ? "None added yet"
+                  : `${orgs.length} business${orgs.length === 1 ? "" : "es"}`}
+              </p>
+            </div>
             <button
               onClick={load}
               disabled={loading}
-              className="text-xs font-semibold uppercase tracking-[0.08em] disabled:opacity-50"
+              className="text-xs font-semibold uppercase tracking-[0.08em] opacity-60 hover:opacity-100 transition disabled:opacity-30"
               style={{ color: "var(--sage)" }}
             >
-              {loading ? "Loading..." : "Refresh"}
+              Refresh
             </button>
           </div>
 
           {loading ? (
-            <div className="mt-6 flex justify-center py-4"><Loader size="sm" /></div>
+            <div className="flex justify-center py-12">
+              <Loader size="sm" />
+            </div>
           ) : orgs.length === 0 ? (
-            <div className="mt-6 rounded-[var(--radius-md)] border border-dashed p-8 text-center" style={{ borderColor: "var(--line)" }}>
-              <p className="text-sm" style={{ color: "var(--sage)" }}>
-                No businesses yet - none have been created, and nobody's added you to one. Add your first one to get started.
+            <div className="px-6 py-12 text-center">
+              <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+                No businesses yet
               </p>
+              <p className="mt-1 text-xs leading-5 max-w-sm mx-auto" style={{ color: "var(--sage)" }}>
+                Add your first business to start getting monthly financial reviews.
+              </p>
+              <button
+                onClick={() => router.push("/business/new")}
+                className="mt-5 font-display text-sm font-bold uppercase tracking-[0.06em] text-white px-5 py-3 rounded-[var(--radius-md)] transition hover:opacity-90"
+                style={{ background: "var(--savanna)" }}
+              >
+                + Add your first business
+              </button>
             </div>
           ) : (
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              {orgs.map((org) => (
-                <div
+            <ul>
+              {orgs.map((org, i) => (
+                <li
                   key={org.slug}
-                  className="group rounded-[var(--radius-md)] border p-4 flex flex-col justify-between transition hover:shadow-sm"
-                  style={{ borderColor: "var(--line)", background: "var(--bone)" }}
+                  className="group px-6 py-5 flex items-start justify-between gap-4 hover:bg-[var(--bone)] transition cursor-pointer"
+                  style={{ borderTop: i === 0 ? "none" : "1px solid var(--line)" }}
+                  onClick={() => router.push(`/business/${org.slug}`)}
                 >
-                  {/* Clickable Area: Safely routes context flow to company route views */}
-                  <div 
-                    onClick={() => router.push(`/business/${org.slug}`)}
-                    className="cursor-pointer flex-1"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="font-semibold group-hover:text-[var(--savanna)] transition-colors" style={{ color: "var(--ink)" }}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p
+                        className="text-sm font-semibold group-hover:text-[var(--savanna)] transition-colors"
+                        style={{ color: "var(--ink)" }}
+                      >
                         {org.company_name}
                       </p>
                       <span
@@ -203,43 +234,128 @@ export default function Home() {
                         {org.role}
                       </span>
                     </div>
-                    <p className="mt-1 text-xs" style={{ color: "var(--sage)" }}>
-                      {org.branch_count} {org.branch_count === 1 ? "branch" : "branches"} - <span className="font-mono text-[11px]">{org.slug}</span>
+
+                    <p className="mt-0.5 text-xs" style={{ color: "var(--sage)" }}>
+                      {org.branch_count} {org.branch_count === 1 ? "branch" : "branches"} · <span className="font-mono">{org.slug}</span>
                     </p>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {[
+                        "Upload statements or connect Zoho Books",
+                        "Run your monthly analysis",
+                        "Review flags and push to Google Sheets",
+                      ].map((step, i) => (
+                        <span
+                          key={i}
+                          className="flex items-center gap-1.5 text-[11px]"
+                          style={{ color: "var(--sage)" }}
+                        >
+                          <span
+                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold"
+                            style={{ background: "var(--bone-dim)", color: "var(--ink)" }}
+                          >
+                            {i + 1}
+                          </span>
+                          {step}
+                          {i < 2 && (
+                            <span style={{ color: "var(--line)" }}>·</span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
                   </div>
 
-                  {/* Inline Action Toolbar Settings Panel */}
-                  <div className="mt-4 pt-3 border-t flex justify-end items-center gap-4" style={{ borderColor: "var(--line)" }}>
+                  <div className="flex flex-col items-end gap-3 shrink-0 pt-0.5">
                     <button
-                      onClick={() => router.push(`/business/${org.slug}/edit`)}
-                      className="text-[11px] font-bold uppercase tracking-wider transition opacity-60 hover:opacity-100"
-                      style={{ color: "var(--ink)" }}
-                    >
-                      Edit Settings
-                    </button>
-                    <button
-                      onClick={() => setDeletingSlug(org.slug)}
-                      className="text-[11px] font-bold uppercase tracking-wider transition opacity-70 hover:opacity-100"
+                      onClick={(e) => { e.stopPropagation(); setDeletingSlug(org.slug); }}
+                      className="text-[11px] font-bold uppercase tracking-wider opacity-40 hover:opacity-100 transition"
                       style={{ color: "var(--clay)" }}
                     >
                       Delete
                     </button>
+                    <span className="text-xs font-semibold" style={{ color: "var(--savanna)" }}>
+                      Open →
+                    </span>
                   </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {orgs.length > 0 && (
+            <div className="px-6 py-4 border-t" style={{ borderColor: "var(--line)" }}>
+              <button
+                onClick={() => router.push("/business/new")}
+                className="font-display w-full rounded-[var(--radius-md)] px-5 py-3 text-sm font-bold uppercase tracking-[0.06em] text-white transition hover:opacity-90"
+                style={{ background: "var(--savanna)" }}
+              >
+                + Add a business
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* How it works — only when no businesses exist */}
+        {!loading && orgs.length === 0 && (
+          <div
+            className="mt-5 rounded-[var(--radius-lg)] border p-6"
+            style={{ borderColor: "var(--line)", background: "white" }}
+          >
+            <p className="text-xs font-bold uppercase tracking-[0.14em]" style={{ color: "var(--savanna)" }}>
+              What happens after you add a business
+            </p>
+            <div className="mt-5 grid gap-5 sm:grid-cols-3">
+              {[
+                {
+                  step: "01",
+                  title: "Connect your data",
+                  detail:
+                    "From your business dashboard, connect Zoho Books via OAuth for automatic syncing, or upload M-Pesa statements, bank exports, or CSV files directly. Both paths work.",
+                },
+                {
+                  step: "02",
+                  title: "Run your analysis",
+                  detail:
+                    "Your dashboard runs the engine against your data and checks for mixed funds, duplicate payments, cash flow risk, and unreconciled entries.",
+                },
+                {
+                  step: "03",
+                  title: "Act on your report",
+                  detail:
+                    "You get a plain-language summary with a prioritised action list. From there you can push everything to a Google Sheet your accountant can work from directly.",
+                },
+              ].map((item) => (
+                <div key={item.step}>
+                  <span className="font-mono text-xs font-semibold" style={{ color: "var(--sage)" }}>
+                    {item.step}
+                  </span>
+                  <p className="font-display mt-1 text-sm font-bold" style={{ color: "var(--ink)" }}>
+                    {item.title}
+                  </p>
+                  <p className="mt-1.5 text-xs leading-5" style={{ color: "var(--sage)" }}>
+                    {item.detail}
+                  </p>
                 </div>
               ))}
             </div>
-          )}
-
-          <div className="mt-6 border-t pt-5" style={{ borderColor: "var(--line)" }}>
-            <button
-              onClick={() => router.push("/business/new")}
-              className="font-display w-full rounded-[var(--radius-md)] px-5 py-3 text-sm font-bold uppercase tracking-[0.06em] text-white transition"
-              style={{ background: "var(--savanna)" }}
-            >
-              + Add a business
-            </button>
           </div>
-        </div>
+        )}
+
+        {/* Footer */}
+        <p className="mt-8 text-center text-xs" style={{ color: "var(--sage)" }}>
+          Dohtective · Built for Kenyan SMEs ·{" "}
+          <a href="/pricing" className="underline underline-offset-2" style={{ color: "var(--sage)" }}>
+            Pricing
+          </a>{" "}
+          ·{" "}
+          <button
+            onClick={() => signOut({ callbackUrl: "/sign-in" })}
+            className="underline underline-offset-2"
+            style={{ color: "var(--sage)" }}
+          >
+            Sign out
+          </button>
+        </p>
       </main>
     </div>
   );

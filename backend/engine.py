@@ -18,33 +18,55 @@ from detection.report_builder import build_report  # noqa: F401
 NEXTJS_WEBHOOK_URL = os.getenv("NEXTJS_ANCHOR_URL", "http://localhost:3000/api/anchor")
 DETECTION_ENGINE_SECRET = os.getenv("DETECTION_ENGINE_SECRET", "YOUR_GENERATED_DETECTION_ENGINE_SECRET")
 
+
 def send_to_avalanche_webhook(business_id: str, report: dict) -> None:
-    """Ships the compiled report details to the Next.js on-chain anchor API."""
+    """Ships the compiled report to the Next.js on-chain anchor API.
+    
+    Payload shape matches what /api/anchor expects:
+    - flags: list of {title, severity} — used to build the deterministic hash
+    - cashBufferDays: int — included in the hash so cash position is anchored too
+    
+    Non-fatal: if the webhook fails, the report is still returned to the caller.
+    The anchor failure is logged and stored in anchorStatus="failed" by the API.
+    """
     headers = {
         "Authorization": f"Bearer {DETECTION_ENGINE_SECRET}",
         "Content-Type": "application/json"
     }
-    
-    # Safely extract dynamic values from your engine's standardized report layout
-    # Adjust the dictionary lookups if your report schema uses different keys
+
+    # Extract flags in the shape the anchor route expects
+    raw_flags = report.get("flags", [])
+    flags = [
+        {"title": f.get("title", ""), "severity": f.get("severity", "low")}
+        for f in raw_flags
+        if f.get("title")
+    ]
+
     payload = {
         "businessId": business_id,
-        "anomalySummary": report.get("summary", "Automated anomaly evaluation complete."),
-        "severeRiskCount": report.get("severe_risk_count", len(report.get("anomalies", []))),
+        "anomalySummary": report.get("plain_language", [""])[0] if report.get("plain_language") else "Analysis complete.",
+        "severeRiskCount": sum(1 for f in raw_flags if f.get("severity") == "high"),
         "rawLedgerData": {
-            "items": report.get("flagged_items", report.get("anomalies", []))
+            "flags": flags,
+            "cashBufferDays": report.get("cash_buffer_days", 0),
         }
     }
-    
+
     try:
         response = requests.post(NEXTJS_WEBHOOK_URL, headers=headers, json=payload, timeout=10)
         if response.status_code == 200:
-            sys.stderr.write(f"🚀 [Avalanche Sync] Success! Tx Hash: {response.json().get('transactionHash')}\n")
+            data = response.json()
+            sys.stderr.write(
+                f"🚀 [Avalanche] Anchored. Tx: {data.get('transactionHash', 'unknown')}\n"
+            )
         else:
-            sys.stderr.write(f"❌ [Avalanche Sync] API Error ({response.status_code}): {response.text}\n")
+            sys.stderr.write(
+                f"❌ [Avalanche] Anchor failed ({response.status_code}): {response.text}\n"
+            )
     except Exception as e:
-        sys.stderr.write(f"⚠️ [Avalanche Sync] Failed connecting to webhook: {str(e)}\n")
+        sys.stderr.write(f"⚠️ [Avalanche] Webhook unreachable: {str(e)}\n")
 
+        
 def main() -> None:
     if len(sys.argv) > 1:
         with open(sys.argv[1], "r", encoding="utf-8") as fd:

@@ -1,12 +1,9 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import fs from 'fs';
-import path from 'path';
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
 import { requireBusinessMember, UnauthorizedError } from '../../../../lib/authz';
 
-const execAsync = promisify(exec);
+const DETECTION_SERVICE_URL =
+  process.env.DETECTION_SERVICE_URL ?? 'http://localhost:8123';
 
 export async function POST(
   req: Request,
@@ -30,7 +27,10 @@ export async function POST(
 
   if (transactions.length === 0) {
     return NextResponse.json(
-      { error: 'No transactions found. Upload at least one file before running analysis.' },
+      {
+        error:
+          'No transactions found. Upload at least one file before running analysis.',
+      },
       { status: 400 }
     );
   }
@@ -53,29 +53,23 @@ export async function POST(
     notes: t.notes,
   }));
 
-  const backendDir = path.join(process.cwd(), 'backend');
-  const tempFile = `temp_data_${slug}.json`;
-  const filePath = path.join(backendDir, tempFile);
-
   try {
-    fs.writeFileSync(
-      filePath,
-      JSON.stringify({ businessId: slug, transactions: engineTransactions }, null, 2),
-      'utf8'
-    );
+    const analyzeRes = await fetch(`${DETECTION_SERVICE_URL}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        businessId: slug,
+        transactions: engineTransactions,
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
 
-    const { stdout, stderr } = await execAsync(
-      `python engine.py ${tempFile}`,
-      { cwd: backendDir }
-    );
-
-    if (!stdout || !stdout.trim()) {
-      throw new Error(stderr || 'Engine produced no output.');
+    if (!analyzeRes.ok) {
+      const detail = await analyzeRes.json().catch(() => ({}));
+      throw new Error(detail.detail ?? 'Analysis failed.');
     }
 
-    const report = JSON.parse(stdout.trim());
-
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    const { report } = await analyzeRes.json();
 
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -96,15 +90,20 @@ export async function POST(
     };
 
     if (existing) {
-      await prisma.reportSnapshot.update({ where: { id: existing.id }, data: snapshotData });
+      await prisma.reportSnapshot.update({
+        where: { id: existing.id },
+        data: snapshotData,
+      });
     } else {
-      await prisma.reportSnapshot.create({ data: { businessId: business.id, ...snapshotData } });
+      await prisma.reportSnapshot.create({
+        data: { businessId: business.id, ...snapshotData },
+      });
     }
 
     return NextResponse.json({ success: true, report });
   } catch (err) {
-    if (fs.existsSync(filePath)) try { fs.unlinkSync(filePath); } catch {}
     const message = err instanceof Error ? err.message : String(err);
+    console.error('[analyse] Error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
