@@ -1,28 +1,40 @@
 // app/pricing/page.tsx
+// ThirdwebProvider now lives only here — not in root layout.
+// ConnectButton and TransactionButton are lazy-loaded only when
+// the user selects the crypto payment method, so the page renders
+// instantly and the wallet SDK only initializes when actually needed.
+// Exchange rate fetch is deferred after first render so it never
+// blocks the initial paint.
+
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useSession } from "next-auth/react";
+import { ThirdwebProvider } from "thirdweb/react";
 import "../frontend/styles/tokens.css";
 import LandingNav from "../frontend/components/LandingNav";
 import LandingFooter from "../frontend/components/LandingFooter";
-import { ConnectButton, TransactionButton } from "thirdweb/react";
 import { client, activeChain, paymentsContract } from "../frontend/lib/thirdweb";
 import { prepareContractCall } from "thirdweb";
 
-// ── Credit packages ──────────────────────────────────────────────────
-// One credit = one full analysis run. Credits never expire.
-// USDC amounts are in base units (6 decimals): $2 = 2_000_000 units.
+// Lazy load the heavy Thirdweb UI components — only pulled in when
+// the user actually selects crypto as their payment method.
+const ConnectButton = lazy(() =>
+  import("thirdweb/react").then((m) => ({ default: m.ConnectButton }))
+);
+const TransactionButton = lazy(() =>
+  import("thirdweb/react").then((m) => ({ default: m.TransactionButton }))
+);
 
 interface Package {
   id: string;
   name: string;
   credits: number;
-  usdcAmount: number;       // display price in USDC
-  usdcUnits: bigint;        // contract param (6 decimal base units)
-  durationDays: number;     // passed to contract for record-keeping
-  tag: string | null;       // badge label
-  perCredit: string;        // unit cost label
+  usdcAmount: number;
+  usdcUnits: bigint;
+  durationDays: number;
+  tag: string | null;
+  perCredit: string;
   description: string;
 }
 
@@ -81,32 +93,38 @@ export default function PricingPage() {
   const { data: session, status } = useSession();
   const isSignedIn = status === "authenticated";
 
-  const [selected, setSelected] = useState<Package>(PACKAGES[2]); // Growth default
+  const [selected, setSelected] = useState<Package>(PACKAGES[2]);
   const [exchangeRate, setExchangeRate] = useState<number>(129.5);
   const [rateLoading, setRateLoading] = useState(true);
   const [paymentDone, setPaymentDone] = useState(false);
+  const [showCrypto, setShowCrypto] = useState(false);
 
-  // Business slug from session — used as businessId in the contract call
-  // The founder must be signed in for crypto payment to work
-  const businessSlug = ""; // TODO: if you have a slug in context, pass it here
+  const businessSlug = "";
 
+  // Deferred — runs after first paint so it never blocks rendering
   useEffect(() => {
+    let cancelled = false;
     async function fetchRate() {
       try {
         const res = await fetch("https://api.coinbase.com/v2/prices/USDC-KES/spot");
         if (!res.ok) throw new Error("Rate fetch failed");
         const json = await res.json();
         const rate = parseFloat(json?.data?.amount);
-        if (!isNaN(rate) && rate > 0) setExchangeRate(rate);
+        if (!cancelled && !isNaN(rate) && rate > 0) setExchangeRate(rate);
       } catch {
-        // Fallback rate is already set
+        // Fallback rate already set
       } finally {
-        setRateLoading(false);
+        if (!cancelled) setRateLoading(false);
       }
     }
-    fetchRate();
+    // Small delay so page renders first
+    const t = setTimeout(fetchRate, 300);
     const interval = setInterval(fetchRate, 300_000);
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+      clearInterval(interval);
+    };
   }, []);
 
   const kesEquivalent = (usdc: number) =>
@@ -139,7 +157,7 @@ export default function PricingPage() {
             return (
               <button
                 key={pkg.id}
-                onClick={() => { setSelected(pkg); setPaymentDone(false); }}
+                onClick={() => { setSelected(pkg); setPaymentDone(false); setShowCrypto(false); }}
                 className="relative text-left rounded-[var(--radius-lg)] border p-5 transition hover:shadow-sm"
                 style={{
                   borderColor: isSelected ? "var(--savanna)" : "var(--line)",
@@ -155,27 +173,21 @@ export default function PricingPage() {
                     {pkg.tag}
                   </span>
                 )}
-
                 <p className="font-display text-base font-bold" style={{ color: "var(--ink)" }}>
                   {pkg.name}
                 </p>
-
                 <p className="mt-2">
                   <span className="font-display text-2xl font-bold" style={{ color: "var(--ink)" }}>
                     {pkg.usdcAmount === 0 ? "Free" : `$${pkg.usdcAmount} USDC`}
                   </span>
                 </p>
-
                 <p className="mt-0.5 text-xs" style={{ color: "var(--sage)" }}>
                   {rateLoading ? "—" : kesEquivalent(pkg.usdcAmount)}
                 </p>
-
                 <div className="mt-4 pt-4 border-t" style={{ borderColor: "var(--line)" }}>
                   <p className="text-2xl font-bold font-display" style={{ color: "var(--ink)" }}>
                     {pkg.credits}
-                    <span className="text-sm font-normal ml-1" style={{ color: "var(--sage)" }}>
-                      credits
-                    </span>
+                    <span className="text-sm font-normal ml-1" style={{ color: "var(--sage)" }}>credits</span>
                   </p>
                   <p className="mt-1 text-xs font-semibold" style={{ color: "var(--savanna)" }}>
                     {pkg.perCredit}
@@ -186,14 +198,11 @@ export default function PricingPage() {
           })}
         </div>
 
-        {/* Selected package detail + payment */}
+        {/* Detail + payment */}
         <div className="mt-8 grid gap-6 md:grid-cols-2">
 
           {/* What you get */}
-          <div
-            className="rounded-[var(--radius-lg)] border p-6 bg-white"
-            style={{ borderColor: "var(--line)" }}
-          >
+          <div className="rounded-[var(--radius-lg)] border p-6 bg-white" style={{ borderColor: "var(--line)" }}>
             <p className="text-xs font-bold uppercase tracking-[0.14em]" style={{ color: "var(--sage)" }}>
               {selected.name} package
             </p>
@@ -203,7 +212,6 @@ export default function PricingPage() {
             <p className="mt-3 text-sm leading-6" style={{ color: "var(--sage)" }}>
               {selected.description}
             </p>
-
             <div className="mt-5 space-y-3">
               {[
                 "Full anomaly detection — mixed funds, duplicates, unusual transactions",
@@ -213,46 +221,27 @@ export default function PricingPage() {
                 "Report anchored on Avalanche — verifiable by anyone",
               ].map((f) => (
                 <div key={f} className="flex items-start gap-2.5">
-                  <span
-                    className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{ background: "var(--savanna)" }}
-                  />
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "var(--savanna)" }} />
                   <p className="text-sm" style={{ color: "var(--ink)" }}>{f}</p>
                 </div>
               ))}
             </div>
-
-            {/* Live rate */}
             {selected.usdcAmount > 0 && (
               <p className="mt-5 text-xs" style={{ color: "var(--sage)" }}>
-                {rateLoading
-                  ? "Loading live rate…"
-                  : `Live rate: 1 USDC = KES ${exchangeRate.toFixed(2)} · ${kesEquivalent(selected.usdcAmount)}`}
+                {rateLoading ? "Loading live rate…" : `Live rate: 1 USDC = KES ${exchangeRate.toFixed(2)} · ${kesEquivalent(selected.usdcAmount)}`}
               </p>
             )}
           </div>
 
           {/* Payment panel */}
-          <div
-            className="rounded-[var(--radius-lg)] border p-6 bg-white flex flex-col"
-            style={{ borderColor: "var(--line)" }}
-          >
+          <div className="rounded-[var(--radius-lg)] border p-6 bg-white flex flex-col" style={{ borderColor: "var(--line)" }}>
             {selected.usdcAmount === 0 ? (
-              // Free tier
               <div className="flex flex-col items-center justify-center flex-1 text-center gap-4 py-4">
-                <div
-                  className="flex h-14 w-14 items-center justify-center rounded-full text-2xl"
-                  style={{ background: "var(--savanna-dim)" }}
-                >
-                  ✓
-                </div>
+                <div className="flex h-14 w-14 items-center justify-center rounded-full text-2xl" style={{ background: "var(--savanna-dim)" }}>✓</div>
                 <div>
-                  <p className="font-display text-base font-bold" style={{ color: "var(--ink)" }}>
-                    Already included
-                  </p>
+                  <p className="font-display text-base font-bold" style={{ color: "var(--ink)" }}>Already included</p>
                   <p className="mt-1 text-sm leading-5" style={{ color: "var(--sage)" }}>
-                    Every business starts with 3 free credits. No card needed —
-                    they're waiting in your dashboard.
+                    Every business starts with 3 free credits. No card needed — they're waiting in your dashboard.
                   </p>
                 </div>
                 <a
@@ -264,21 +253,12 @@ export default function PricingPage() {
                 </a>
               </div>
             ) : paymentDone ? (
-              // Success state
               <div className="flex flex-col items-center justify-center flex-1 text-center gap-4 py-4">
-                <div
-                  className="flex h-14 w-14 items-center justify-center rounded-full text-2xl"
-                  style={{ background: "var(--savanna-dim)" }}
-                >
-                  ✓
-                </div>
+                <div className="flex h-14 w-14 items-center justify-center rounded-full text-2xl" style={{ background: "var(--savanna-dim)" }}>✓</div>
                 <div>
-                  <p className="font-display text-base font-bold" style={{ color: "var(--ink)" }}>
-                    {selected.credits} credits added
-                  </p>
+                  <p className="font-display text-base font-bold" style={{ color: "var(--ink)" }}>{selected.credits} credits added</p>
                   <p className="mt-1 text-sm leading-5" style={{ color: "var(--sage)" }}>
-                    Your payment is confirmed on Avalanche. Credits are now
-                    available in your dashboard.
+                    Your payment is confirmed on Avalanche. Credits are now available in your dashboard.
                   </p>
                 </div>
                 <a
@@ -289,26 +269,22 @@ export default function PricingPage() {
                   Go to my businesses →
                 </a>
               </div>
-            ) : (
-              // Crypto payment
+            ) : !showCrypto ? (
+              // Show a simple CTA first — only load Thirdweb when they click
               <div className="flex flex-col gap-5">
                 <div>
                   <p className="font-display text-base font-bold" style={{ color: "var(--ink)" }}>
                     Pay with USDC on Avalanche
                   </p>
                   <p className="mt-1 text-xs leading-5" style={{ color: "var(--sage)" }}>
-                    Settles in ~2 seconds. Credits are added automatically once
-                    the transaction confirms on-chain. You need USDC on
-                    Avalanche Fuji testnet.
+                    Settles in ~2 seconds. Credits are added automatically once the transaction confirms on-chain.
                   </p>
                 </div>
-
-                {/* How it works */}
                 <div className="rounded-[var(--radius-md)] p-4 space-y-2.5" style={{ background: "var(--bone)" }}>
                   {[
-                    "Connect your wallet below",
+                    "Connect your Avalanche wallet",
                     `Approve $${selected.usdcAmount} USDC transfer`,
-                    "Credits land in your account instantly",
+                    "Credits appear in your account instantly",
                   ].map((step, i) => (
                     <div key={i} className="flex items-center gap-2.5">
                       <span
@@ -321,7 +297,6 @@ export default function PricingPage() {
                     </div>
                   ))}
                 </div>
-
                 {!isSignedIn && (
                   <div
                     className="rounded-[var(--radius-md)] border p-3 text-xs text-center"
@@ -331,80 +306,101 @@ export default function PricingPage() {
                     <a href="/sign-in" className="font-bold underline">Sign in →</a>
                   </div>
                 )}
-
-                <ConnectButton client={client} chain={activeChain} />
-
-                <TransactionButton
-                  transaction={() =>
-                    prepareContractCall({
-                      contract: paymentsContract,
-                      method:
-                        "function payForPremium(string calldata businessId, uint256 amount, uint256 durationDays) external",
-                      params: [
-                        businessSlug || session?.user?.email || "unknown",
-                        selected.usdcUnits,
-                        BigInt(selected.durationDays),
-                      ],
-                    })
-                  }
-                  onTransactionSent={(result) => {
-                    console.log("[payment] Submitted:", result.transactionHash);
-                  }}
-                  onTransactionConfirmed={async (receipt) => {
-                    try {
-                      const res = await fetch('/api/business/topup-credits', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          transactionHash: receipt.transactionHash,
-                          businessSlug: businessSlug || session?.user?.email || 'unknown',
-                          amountUnits: Number(selected.usdcUnits),
-                        }),
-                      });
-                      if (!res.ok) {
-                        const err = await res.json().catch(() => ({}));
-                        throw new Error(err.error ?? 'Credit top-up failed.');
-                      }
-                      setPaymentDone(true);
-                    } catch (err) {
-                      alert(err instanceof Error ? err.message : 'Payment confirmed but credits could not be added. Contact support with your tx hash.');
-                    }
-                  }}
-                  onError={(err) => {
-                    console.error("[payment] Failed:", err.message);
-                    alert(`Payment failed: ${err.message}`);
-                  }}
-                  style={{
-                    width: "100%",
-                    background: "var(--ink)",
-                    color: "white",
-                    borderRadius: "var(--radius-md)",
-                    padding: "12px 20px",
-                    fontSize: "13px",
-                    fontWeight: "700",
-                    letterSpacing: "0.06em",
-                    textTransform: "uppercase",
-                    cursor: "pointer",
-                    border: "none",
-                  }}
+                <button
+                  onClick={() => setShowCrypto(true)}
+                  className="font-display w-full rounded-[var(--radius-md)] px-5 py-3.5 text-sm font-bold uppercase tracking-[0.06em] text-white transition hover:opacity-90"
+                  style={{ background: "var(--ink)" }}
                 >
-                  Pay ${selected.usdcAmount} USDC → Get {selected.credits} credits
-                </TransactionButton>
-
+                  Connect wallet & pay ${selected.usdcAmount} USDC
+                </button>
                 <p className="text-[10px] text-center" style={{ color: "var(--sage)" }}>
-                  Transaction verified on Avalanche Fuji testnet. Your report
-                  history is anchored on-chain and independently verifiable.
+                  You need USDC on Avalanche Fuji testnet to complete this payment.
                 </p>
               </div>
+            ) : (
+              // Only rendered after user clicks — ThirdwebProvider + lazy components load here
+              <ThirdwebProvider>
+                <div className="flex flex-col gap-4">
+                  <Suspense fallback={<div className="h-10 rounded-md animate-pulse" style={{ background: "var(--bone)" }} />}>
+                    <ConnectButton client={client} chain={activeChain} />
+                  </Suspense>
+                  <Suspense fallback={<div className="h-12 rounded-md animate-pulse" style={{ background: "var(--bone)" }} />}>
+                    <TransactionButton
+                      transaction={() =>
+                        prepareContractCall({
+                          contract: paymentsContract,
+                          method:
+                            "function payForPremium(string calldata businessId, uint256 amount, uint256 durationDays) external",
+                          params: [
+                            businessSlug || session?.user?.email || "unknown",
+                            selected.usdcUnits,
+                            BigInt(selected.durationDays),
+                          ],
+                        })
+                      }
+                      onTransactionSent={(result) => {
+                        console.log("[payment] Submitted:", result.transactionHash);
+                      }}
+                      onTransactionConfirmed={async (receipt) => {
+                        try {
+                          const res = await fetch("/api/business/topup-credits", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              transactionHash: receipt.transactionHash,
+                              businessSlug: businessSlug || session?.user?.email || "unknown",
+                              amountUnits: Number(selected.usdcUnits),
+                            }),
+                          });
+                          if (!res.ok) {
+                            const err = await res.json().catch(() => ({}));
+                            throw new Error(err.error ?? "Credit top-up failed.");
+                          }
+                          setPaymentDone(true);
+                        } catch (err) {
+                          alert(
+                            err instanceof Error
+                              ? err.message
+                              : "Payment confirmed but credits could not be added. Contact support with your tx hash."
+                          );
+                        }
+                      }}
+                      onError={(err) => {
+                        console.error("[payment] Failed:", err.message);
+                        alert(`Payment failed: ${err.message}`);
+                      }}
+                      style={{
+                        width: "100%",
+                        background: "var(--ink)",
+                        color: "white",
+                        borderRadius: "var(--radius-md)",
+                        padding: "12px 20px",
+                        fontSize: "13px",
+                        fontWeight: "700",
+                        letterSpacing: "0.06em",
+                        textTransform: "uppercase",
+                        cursor: "pointer",
+                        border: "none",
+                      }}
+                    >
+                      Pay ${selected.usdcAmount} USDC → Get {selected.credits} credits
+                    </TransactionButton>
+                  </Suspense>
+                  <button
+                    onClick={() => setShowCrypto(false)}
+                    className="text-xs text-center underline underline-offset-2"
+                    style={{ color: "var(--sage)" }}
+                  >
+                    ← Back
+                  </button>
+                </div>
+              </ThirdwebProvider>
             )}
           </div>
         </div>
 
         {/* Credit explainer */}
-        <div
-          className="mt-8 rounded-[var(--radius-lg)] border p-6"
-          style={{ borderColor: "var(--line)", background: "white" }}
-        >
+        <div className="mt-8 rounded-[var(--radius-lg)] border p-6" style={{ borderColor: "var(--line)", background: "white" }}>
           <p className="text-xs font-bold uppercase tracking-[0.14em]" style={{ color: "var(--sage)" }}>
             How credits work
           </p>

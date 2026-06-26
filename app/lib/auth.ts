@@ -24,7 +24,9 @@ import { prisma } from "./prisma";
 function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
-    throw new Error(`Missing required environment variable ${name} - check .env.local.`);
+    throw new Error(
+      `Missing required environment variable ${name} - check .env.local.`,
+    );
   }
   return value;
 }
@@ -46,18 +48,42 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
+      // Only the Credentials authorize function changes — replace it:
       async authorize(credentials) {
-        const email = credentials?.email as string | undefined;
-        const password = credentials?.password as string | undefined;
+        const email =
+          typeof credentials?.email === "string"
+            ? credentials.email.trim().toLowerCase()
+            : undefined;
+        const password =
+          typeof credentials?.password === "string"
+            ? credentials.password
+            : undefined;
+
         if (!email || !password) return null;
 
         const user = await prisma.user.findUnique({ where: { email } });
-        if (!user || !user.passwordHash) return null; // no password set = Google-only account
 
-        const valid = await bcrypt.compare(password, user.passwordHash);
-        if (!valid) return null;
+        // Always run bcrypt.compare even when no user found — prevents timing
+        // attacks that enumerate valid email addresses by measuring response time
+        const dummyHash =
+          "$2a$12$dummyhashthatisnevervalidbutisrightlength00000000000000";
+        const hashToCompare = user?.passwordHash ?? dummyHash;
+        const valid = await bcrypt.compare(password, hashToCompare);
 
-        return { id: user.id, email: user.email, name: user.name, image: user.image };
+        if (!user || !user.passwordHash || !valid) return null;
+
+        // Block sign-in for unverified accounts
+        if (!user.emailVerified) {
+          // Throw with a specific message NextAuth surfaces as error param
+          throw new Error("EMAIL_NOT_VERIFIED");
+        }
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          image: user.image,
+        };
       },
     }),
   ],
@@ -90,8 +116,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       await prisma.$transaction([
         ...pendingInvites.map((invite) =>
           prisma.businessMember.create({
-            data: { businessId: invite.businessId, userId: user.id!, role: invite.role },
-          })
+            data: {
+              businessId: invite.businessId,
+              userId: user.id!,
+              role: invite.role,
+            },
+          }),
         ),
         prisma.businessInvite.updateMany({
           where: { id: { in: pendingInvites.map((i) => i.id) } },

@@ -41,7 +41,7 @@ async function getAccessToken(refreshToken: string): Promise<string> {
     const detail = await res.text();
     throw new Error(`Token refresh failed: ${detail}`);
   }
-  const data = await res.json() as { access_token: string };
+  const data = (await res.json()) as { access_token: string };
   return data.access_token;
 }
 
@@ -50,16 +50,19 @@ async function sheetsRequest(
   method: string,
   path: string,
   accessToken: string,
-  body?: unknown
+  body?: unknown,
 ): Promise<unknown> {
-  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets${path}`,
+    {
+      method,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
     },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  );
   if (!res.ok) {
     const detail = await res.text();
     throw new Error(`Sheets API error (${res.status}): ${detail}`);
@@ -69,19 +72,63 @@ async function sheetsRequest(
 
 // ── Row builders (mirrors sheets_dashboard.py logic, in TS) ─────────
 const SEVERITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
-const SEVERITY_EMOJI: Record<string, string> = { high: "🔴", medium: "🟡", low: "⚪" };
+const SEVERITY_EMOJI: Record<string, string> = {
+  high: "🔴",
+  medium: "🟡",
+  low: "⚪",
+};
 
 const ROLE_BY_FLAG_KEYWORD: Array<[string, string, string]> = [
-  ["mixed personal", "Founder", "Check whether this was a genuine personal expense paid from the business account. If so, record it as an owner draw."],
-  ["duplicate payment", "Accountant", "Confirm with the supplier whether this was a deliberate re-order or an accidental double payment. Request a refund if duplicate."],
-  ["round-number payment", "Accountant", "Verify this payment against a supporting invoice. New, round-number payments to unfamiliar recipients are worth a second look."],
-  ["unusually precise", "Accountant", "Confirm this recipient and payment are legitimate — no prior history with this exact amount makes it worth a second look."],
-  ["unusual transaction", "Accountant", "Review the transaction description and confirm it matches a real, expected business expense."],
-  ["unreconciled", "Accountant", "Match this transaction against the bank statement and mark it reconciled."],
-  ["reference number sequence", "Accountant", "Check whether the missing reference numbers were voided entries or genuinely missing records."],
-  ["supporting documents", "Accountant", "Request the missing receipt or invoice from whoever made this purchase."],
-  ["bank statement", "Accountant", "Complete the bank reconciliation for this statement period."],
-  ["cash buffer", "Founder", "Review upcoming payments due and confirm there's enough cash to cover them — line up financing or collections if not."],
+  [
+    "mixed personal",
+    "Founder",
+    "Check whether this was a genuine personal expense paid from the business account. If so, record it as an owner draw.",
+  ],
+  [
+    "duplicate payment",
+    "Accountant",
+    "Confirm with the supplier whether this was a deliberate re-order or an accidental double payment. Request a refund if duplicate.",
+  ],
+  [
+    "round-number payment",
+    "Accountant",
+    "Verify this payment against a supporting invoice. New, round-number payments to unfamiliar recipients are worth a second look.",
+  ],
+  [
+    "unusually precise",
+    "Accountant",
+    "Confirm this recipient and payment are legitimate — no prior history with this exact amount makes it worth a second look.",
+  ],
+  [
+    "unusual transaction",
+    "Accountant",
+    "Review the transaction description and confirm it matches a real, expected business expense.",
+  ],
+  [
+    "unreconciled",
+    "Accountant",
+    "Match this transaction against the bank statement and mark it reconciled.",
+  ],
+  [
+    "reference number sequence",
+    "Accountant",
+    "Check whether the missing reference numbers were voided entries or genuinely missing records.",
+  ],
+  [
+    "supporting documents",
+    "Accountant",
+    "Request the missing receipt or invoice from whoever made this purchase.",
+  ],
+  [
+    "bank statement",
+    "Accountant",
+    "Complete the bank reconciliation for this statement period.",
+  ],
+  [
+    "cash buffer",
+    "Founder",
+    "Review upcoming payments due and confirm there's enough cash to cover them — line up financing or collections if not.",
+  ],
 ];
 
 function assignAction(flagTitle: string): [string, string] {
@@ -89,13 +136,19 @@ function assignAction(flagTitle: string): [string, string] {
   for (const [keyword, role, action] of ROLE_BY_FLAG_KEYWORD) {
     if (lower.includes(keyword)) return [role, action];
   }
-  return ["Accountant", "Review this flag and determine the appropriate next step."];
+  return [
+    "Accountant",
+    "Review this flag and determine the appropriate next step.",
+  ];
 }
 
 function buildActionRows(report: ReportData): string[][] {
   const today = new Date().toISOString().split("T")[0];
   return [...report.flags]
-    .sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 2) - (SEVERITY_ORDER[b.severity] ?? 2))
+    .sort(
+      (a, b) =>
+        (SEVERITY_ORDER[a.severity] ?? 2) - (SEVERITY_ORDER[b.severity] ?? 2),
+    )
     .map((flag) => {
       const [role, action] = assignAction(flag.title);
       const emoji = SEVERITY_EMOJI[flag.severity] ?? "⚪";
@@ -129,48 +182,108 @@ function buildAnomalyRows(report: ReportData): string[][] {
 async function createSpreadsheet(
   accessToken: string,
   businessName: string,
-  report: ReportData
-): Promise<{ spreadsheetId: string; spreadsheetUrl: string; actionCount: number; anomalyCount: number }> {
+  report: ReportData,
+): Promise<{
+  spreadsheetId: string;
+  spreadsheetUrl: string;
+  actionCount: number;
+  anomalyCount: number;
+}> {
   const now = new Date();
   const title = `${businessName} — Financial Review ${now.toISOString().split("T")[0]}`;
 
   const actionRows = buildActionRows(report);
   const anomalyRows = buildAnomalyRows(report);
 
-  const HEADER_ROW = ["Priority", "Status", "Flag", "What it means", "Assigned to", "Amount (KES)", "Date flagged", "Action needed"];
-  const DETAIL_HEADER = ["Transaction ID", "Date", "Branch", "Contact", "Amount (KES)", "Anomaly type", "Reason", "Reference"];
+  const HEADER_ROW = [
+    "Priority",
+    "Status",
+    "Flag",
+    "What it means",
+    "Assigned to",
+    "Amount (KES)",
+    "Date flagged",
+    "Action needed",
+  ];
+  const DETAIL_HEADER = [
+    "Transaction ID",
+    "Date",
+    "Branch",
+    "Contact",
+    "Amount (KES)",
+    "Anomaly type",
+    "Reason",
+    "Reference",
+  ];
+
+  // Snippet to add to app/api/notify/sheets/route.ts
+  // In createSpreadsheet(), update summaryRows to include the anchor hash.
+  // Replace the existing summaryRows definition with this:
+
+  const anchorHash = (report as any).anchorTxHash ?? null;
+  const anchorStatus = (report as any).anchorStatus ?? null;
 
   const summaryRows = [
     [`${businessName} — Monthly Financial Review`],
-    [`Generated: ${now.toLocaleString("en-KE", { timeZone: "Africa/Nairobi" })}`],
-    [`Cash buffer: ${report.cash_buffer_days} days (${report.cash_buffer_risk_level} risk)`],
+    [
+      `Generated: ${now.toLocaleString("en-KE", { timeZone: "Africa/Nairobi" })}`,
+    ],
+    [
+      `Cash buffer: ${report.cash_buffer_days} days (${report.cash_buffer_risk_level} risk)`,
+    ],
     [`Items needing attention: ${report.flags.length}`],
+    // Anchor row — shows blockchain proof directly in the sheet
+    anchorStatus === "anchored" && anchorHash
+      ? [
+          `Blockchain anchor: ${anchorHash} — verify at https://testnet.snowtrace.io/tx/${anchorHash}`,
+        ]
+      : [`Blockchain anchor: not yet anchored`],
     [],
     HEADER_ROW,
     ...actionRows,
   ];
+  
+  
+  // Also pass anchorTxHash and anchorStatus from the report snapshot
+  // when calling pushToSheets. Update the POST handler in sheets/route.ts:
+  // Change:
+  //   let body: { report: ReportData; business_name: string };
+  // To:
+  //   let body: { report: ReportData & { anchorTxHash?: string; anchorStatus?: string }; business_name: string };
 
   // Create the spreadsheet with two sheets in one API call.
-  const created = await sheetsRequest("POST", "", accessToken, {
+  const created = (await sheetsRequest("POST", "", accessToken, {
     properties: { title },
     sheets: [
       { properties: { title: "Action List", index: 0 } },
       { properties: { title: "Transaction Detail", index: 1 } },
     ],
-  }) as { spreadsheetId: string; spreadsheetUrl: string; sheets: Array<{ properties: { sheetId: number } }> };
+  })) as {
+    spreadsheetId: string;
+    spreadsheetUrl: string;
+    sheets: Array<{ properties: { sheetId: number } }>;
+  };
 
   const spreadsheetId = created.spreadsheetId;
   const actionSheetId = created.sheets[0].properties.sheetId;
   const detailSheetId = created.sheets[1].properties.sheetId;
 
   // Write data in a single batchUpdate.
-  await sheetsRequest("POST", `/${spreadsheetId}/values:batchUpdate`, accessToken, {
-    valueInputOption: "RAW",
-    data: [
-      { range: "Action List!A1", values: summaryRows },
-      { range: "Transaction Detail!A1", values: [[...DETAIL_HEADER], ...anomalyRows] },
-    ],
-  });
+  await sheetsRequest(
+    "POST",
+    `/${spreadsheetId}/values:batchUpdate`,
+    accessToken,
+    {
+      valueInputOption: "RAW",
+      data: [
+        { range: "Action List!A1", values: summaryRows },
+        {
+          range: "Transaction Detail!A1",
+          values: [[...DETAIL_HEADER], ...anomalyRows],
+        },
+      ],
+    },
+  );
 
   // Format: bold header rows, freeze them.
   await sheetsRequest("POST", `/${spreadsheetId}:batchUpdate`, accessToken, {
@@ -186,7 +299,10 @@ async function createSpreadsheet(
       // Freeze first 6 rows on Action List
       {
         updateSheetProperties: {
-          properties: { sheetId: actionSheetId, gridProperties: { frozenRowCount: 6 } },
+          properties: {
+            sheetId: actionSheetId,
+            gridProperties: { frozenRowCount: 6 },
+          },
           fields: "gridProperties.frozenRowCount",
         },
       },
@@ -201,7 +317,10 @@ async function createSpreadsheet(
       // Freeze first row on Transaction Detail
       {
         updateSheetProperties: {
-          properties: { sheetId: detailSheetId, gridProperties: { frozenRowCount: 1 } },
+          properties: {
+            sheetId: detailSheetId,
+            gridProperties: { frozenRowCount: 1 },
+          },
           fields: "gridProperties.frozenRowCount",
         },
       },
@@ -220,7 +339,11 @@ async function createSpreadsheet(
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ configured: false, serviceReachable: true, reason: "not_signed_in" });
+    return NextResponse.json({
+      configured: false,
+      serviceReachable: true,
+      reason: "not_signed_in",
+    });
   }
 
   const connection = await prisma.googleSheetsConnection.findUnique({
@@ -249,8 +372,11 @@ export async function POST(req: NextRequest) {
 
   if (!connection) {
     return NextResponse.json(
-      { error: "Google Sheets not connected. Connect it first from the notify page." },
-      { status: 400 }
+      {
+        error:
+          "Google Sheets not connected. Connect it first from the notify page.",
+      },
+      { status: 400 },
     );
   }
 
@@ -267,18 +393,25 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     // Refresh token may have been revoked — clear the stale connection so
     // the UI correctly shows "not connected" rather than spinning forever.
-    await prisma.googleSheetsConnection.delete({ where: { userId: session.user.id } });
+    await prisma.googleSheetsConnection.delete({
+      where: { userId: session.user.id },
+    });
     return NextResponse.json(
       {
-        error: "Google Sheets authorization has expired or been revoked. Please reconnect.",
+        error:
+          "Google Sheets authorization has expired or been revoked. Please reconnect.",
         code: "TOKEN_EXPIRED",
       },
-      { status: 401 }
+      { status: 401 },
     );
   }
 
   try {
-    const result = await createSpreadsheet(accessToken, body.business_name, body.report);
+    const result = await createSpreadsheet(
+      accessToken,
+      body.business_name,
+      body.report,
+    );
     return NextResponse.json({
       status: "sent",
       sheet_url: result.spreadsheetUrl,
@@ -289,8 +422,11 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("[sheets] Push failed:", err);
     return NextResponse.json(
-      { error: "Failed to write to Google Sheets.", detail: err instanceof Error ? err.message : String(err) },
-      { status: 500 }
+      {
+        error: "Failed to write to Google Sheets.",
+        detail: err instanceof Error ? err.message : String(err),
+      },
+      { status: 500 },
     );
   }
 }
