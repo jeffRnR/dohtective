@@ -1,3 +1,4 @@
+// /app/api/report/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "../../lib/prisma";
 import { requireBusinessMember, UnauthorizedError } from "../../lib/authz";

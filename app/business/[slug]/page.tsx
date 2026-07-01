@@ -1,6 +1,7 @@
+// app/business/[slug]/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { fetchReport } from "../../frontend/lib/api";
 import type { ZohoPayload } from "../../frontend/lib/types";
@@ -9,7 +10,7 @@ import VerdictBand from "../../frontend/components/VerdictBand";
 import MixedFundsSpotlight from "../../frontend/components/MixedFundsSpotlight";
 import FlagFeed from "../../frontend/components/FlagFeed";
 import ActionPlan from "../../frontend/components/ActionPlan";
-import EvidencePanel from "./components/EvidencePanel";
+import EvidencePanel, { type EvidencePanelHandle } from "./components/EvidencePanel";
 import ZohoConnectBanner from "../../frontend/components/ZohoConnectBanner";
 import AnchorBadge from "../../frontend/components/AnchorBadge";
 
@@ -35,46 +36,77 @@ export default function BusinessDashboard() {
     credits: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [showConfirmDisconnect, setShowConfirmDisconnect] = useState(false);
   const [zohoConnected, setZohoConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uiNotification, setUiNotification] = useState<string | null>(null);
 
+  // Ref passed to both FlagFeed and EvidencePanel so FlagFeed can call
+  // evidencePanelRef.current.openToFlag(flagTitle) directly.
+  const evidencePanelRef = useRef<EvidencePanelHandle>(null);
+
   useEffect(() => {
     load();
   }, [slug]);
+
+  async function syncIfConnected(connected: boolean): Promise<void> {
+    if (!connected) return;
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/zoho/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (body.code === "TOKEN_EXPIRED") {
+          setUiNotification(
+            "Your Zoho connection has expired. Please reconnect your Zoho account."
+          );
+          setZohoConnected(false);
+        }
+        console.error("[Zoho sync] failed:", body.error ?? res.statusText);
+      }
+    } catch (err) {
+      console.error("[Zoho sync] network error:", err);
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function load(forceDisconnectState = false) {
     setLoading(true);
     setError(null);
     try {
-      const [result, statusRes, anchorRes, creditsRes] = await Promise.all([
+      const statusRes = await fetch(`/api/zoho/oauth/status?slug=${slug}`);
+      const statusData = await statusRes.json();
+      const isConnected =
+        !forceDisconnectState && statusData.connected === true;
+      setZohoConnected(isConnected);
+
+      await syncIfConnected(isConnected);
+
+      const [result, anchorRes, creditsRes] = await Promise.all([
         fetchReport(slug),
-        fetch(`/api/zoho/oauth/status?slug=${slug}`),
         fetch(`/api/anchor/status?slug=${slug}`),
         fetch(`/api/business/${slug}/credits`),
       ]);
 
       setData(result);
 
-      if (forceDisconnectState) {
-        setZohoConnected(false);
-      } else {
-        const statusData = await statusRes.json();
-        setZohoConnected(statusData.connected === true);
-      }
-
-      // Anchor info — non-fatal if missing
       if (anchorRes.ok) {
         const anchorData = await anchorRes.json();
         setAnchor((prev) => ({ ...prev, ...anchorData }));
       }
-
-      // Credits balance
       if (creditsRes.ok) {
         const creditsData = await creditsRes.json();
-        setAnchor((prev) => ({ ...prev, credits: creditsData.credits ?? 0 }));
+        setAnchor((prev) => ({
+          ...prev,
+          credits: creditsData.credits ?? 0,
+        }));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -94,29 +126,43 @@ export default function BusinessDashboard() {
       });
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error ?? "Failed to disconnect.");
-
       setShowConfirmDisconnect(false);
       setUiNotification("Zoho Books successfully disconnected.");
       setZohoConnected(false);
       await load(true);
     } catch (err) {
       setUiNotification(
-        err instanceof Error ? err.message : "An error occurred while disconnecting.",
+        err instanceof Error
+          ? err.message
+          : "An error occurred while disconnecting."
       );
     } finally {
       setDisconnecting(false);
     }
   }
 
-  if (loading) {
-    return <Loader fullPage label="Loading your monthly risk report..." />;
+  if (loading || syncing) {
+    return (
+      <Loader
+        fullPage
+        label={
+          syncing
+            ? "Syncing your Zoho Books data…"
+            : "Loading your monthly risk report…"
+        }
+      />
+    );
   }
 
   if (error || !data) {
     return (
       <div
         className="rounded-[var(--radius-lg)] border p-6 text-sm font-medium"
-        style={{ borderColor: "var(--clay)", background: "var(--clay-dim)", color: "var(--clay)" }}
+        style={{
+          borderColor: "var(--clay)",
+          background: "var(--clay-dim)",
+          color: "var(--clay)",
+        }}
       >
         {error ?? "Could not load this business."}
       </div>
@@ -126,8 +172,16 @@ export default function BusinessDashboard() {
   const isEmpty = !zohoConnected && !data.hasTransactions;
 
   const sortedFlags = [...(data.report?.flags || [])].sort(
-    (a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity],
+    (a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity]
   );
+
+  // Build a per-flag transaction count map so FlagFeed can show progress
+  // without needing direct access to anomaly_transactions.
+  // Join key: flag.title === anomaly_transaction.anomaly_type
+  const txCountByFlag: Record<string, number> = {};
+  for (const a of data.report.anomaly_transactions) {
+    txCountByFlag[a.anomaly_type] = (txCountByFlag[a.anomaly_type] ?? 0) + 1;
+  }
 
   const BackNavigationButton = () => (
     <div className="flex justify-start pt-2">
@@ -136,27 +190,33 @@ export default function BusinessDashboard() {
         className="group flex items-center gap-2 text-xs font-bold uppercase tracking-[0.06em] opacity-60 hover:opacity-100 transition duration-150 ease-in-out"
         style={{ color: "var(--ink)" }}
       >
-        <span className="transform transition-transform group-hover:-translate-x-1">←</span>
+        <span className="transform transition-transform group-hover:-translate-x-1">
+          ←
+        </span>
         Back to Businesses
       </button>
     </div>
   );
 
-  // Credits warning bar — shown when low or empty
   const CreditsBar = () => {
     if (anchor.credits > 2) return null;
     return (
       <div
         className="rounded-[var(--radius-md)] border px-4 py-3 flex items-center justify-between gap-4"
         style={{
-          borderColor: anchor.credits === 0 ? "var(--clay)" : "var(--marigold)",
-          background: anchor.credits === 0 ? "var(--clay-dim)" : "var(--marigold-dim)",
+          borderColor:
+            anchor.credits === 0 ? "var(--clay)" : "var(--marigold)",
+          background:
+            anchor.credits === 0 ? "var(--clay-dim)" : "var(--marigold-dim)",
         }}
       >
         <div>
           <p
             className="text-sm font-semibold"
-            style={{ color: anchor.credits === 0 ? "var(--clay)" : "var(--marigold)" }}
+            style={{
+              color:
+                anchor.credits === 0 ? "var(--clay)" : "var(--marigold)",
+            }}
           >
             {anchor.credits === 0
               ? "No analysis credits remaining"
@@ -171,7 +231,10 @@ export default function BusinessDashboard() {
         <a
           href="/pricing"
           className="font-display shrink-0 rounded-[var(--radius-md)] px-4 py-2 text-xs font-bold uppercase tracking-[0.06em] text-white transition hover:opacity-90"
-          style={{ background: anchor.credits === 0 ? "var(--clay)" : "var(--marigold)" }}
+          style={{
+            background:
+              anchor.credits === 0 ? "var(--clay)" : "var(--marigold)",
+          }}
         >
           Get credits →
         </a>
@@ -184,7 +247,11 @@ export default function BusinessDashboard() {
       {uiNotification && (
         <div
           className="rounded-[var(--radius-md)] border p-4 text-sm font-medium flex justify-between items-center animate-in fade-in duration-200"
-          style={{ borderColor: "var(--line)", background: "var(--bone)", color: "var(--ink)" }}
+          style={{
+            borderColor: "var(--line)",
+            background: "var(--bone)",
+            color: "var(--ink)",
+          }}
         >
           <span>{uiNotification}</span>
           <button
@@ -201,12 +268,19 @@ export default function BusinessDashboard() {
           className="rounded-[var(--radius-lg)] border p-5 animate-in fade-in slide-in-from-top-2 duration-200 text-left"
           style={{ borderColor: "var(--clay)", background: "var(--clay-dim)" }}
         >
-          <p className="text-sm font-semibold" style={{ color: "var(--clay)" }}>
+          <p
+            className="text-sm font-semibold"
+            style={{ color: "var(--clay)" }}
+          >
             Disconnect Zoho Books Integration?
           </p>
-          <p className="mt-1 text-xs leading-5" style={{ color: "var(--ink)", opacity: 0.8 }}>
-            This will sever the live synchronisation pipeline. Historical transaction
-            records retrieved from Zoho Books will be cleared from your ledger metrics view.
+          <p
+            className="mt-1 text-xs leading-5"
+            style={{ color: "var(--ink)", opacity: 0.8 }}
+          >
+            This will sever the live synchronisation pipeline. Historical
+            transaction records retrieved from Zoho Books will be cleared
+            from your ledger metrics view.
           </p>
           <div className="mt-4 flex gap-3">
             <button
@@ -221,7 +295,11 @@ export default function BusinessDashboard() {
               onClick={() => setShowConfirmDisconnect(false)}
               disabled={disconnecting}
               className="text-xs font-semibold px-4 py-2 rounded-[var(--radius-md)] border transition"
-              style={{ borderColor: "var(--line)", background: "white", color: "var(--ink)" }}
+              style={{
+                borderColor: "var(--line)",
+                background: "white",
+                color: "var(--ink)",
+              }}
             >
               Cancel
             </button>
@@ -250,21 +328,29 @@ export default function BusinessDashboard() {
         <BackNavigationButton />
         <CreditsBar />
         <ZohoConnectBanner slug={slug} />
-
         <div
           className="rounded-[var(--radius-lg)] border p-8 sm:p-10 text-center"
           style={{ borderColor: "var(--line)", background: "white" }}
         >
-          <p className="text-xs font-bold uppercase tracking-[0.18em]" style={{ color: "var(--savanna)" }}>
+          <p
+            className="text-xs font-bold uppercase tracking-[0.18em]"
+            style={{ color: "var(--savanna)" }}
+          >
             No data yet
           </p>
-          <h2 className="font-display mt-2 text-2xl font-bold" style={{ color: "var(--ink)" }}>
+          <h2
+            className="font-display mt-2 text-2xl font-bold"
+            style={{ color: "var(--ink)" }}
+          >
             Upload your first financial statement
           </h2>
-          <p className="mx-auto mt-3 max-w-md text-sm leading-6" style={{ color: "var(--sage)" }}>
-            Dohtective analyses your M-Pesa statements, bank statements, and CSV exports
-            to catch financial risks before they become problems. Upload your files, then
-            run analysis — it takes under a minute.
+          <p
+            className="mx-auto mt-3 max-w-md text-sm leading-6"
+            style={{ color: "var(--sage)" }}
+          >
+            Dohtective analyses your M-Pesa statements, bank statements, and
+            CSV exports to catch financial risks before they become problems.
+            Upload your files, then run analysis — it takes under a minute.
           </p>
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
@@ -275,16 +361,23 @@ export default function BusinessDashboard() {
               Upload your first statement →
             </button>
             <button
-              onClick={() => { window.location.href = `/api/zoho/oauth/start?slug=${slug}`; }}
+              onClick={() => {
+                window.location.href = `/api/zoho/oauth/start?slug=${slug}`;
+              }}
               className="font-display w-full sm:w-auto rounded-[var(--radius-md)] border px-6 py-3.5 text-sm font-bold uppercase tracking-[0.06em] transition hover:opacity-80"
-              style={{ borderColor: "var(--line)", color: "var(--ink)", background: "white" }}
+              style={{
+                borderColor: "var(--line)",
+                color: "var(--ink)",
+                background: "white",
+              }}
             >
               Connect Zoho Books instead
             </button>
           </div>
           <p className="mt-6 text-xs" style={{ color: "var(--sage)" }}>
-            You can upload as many files as you want — weekly, daily, or whenever you have
-            new data. Each upload is stored and combined when you run analysis.
+            You can upload as many files as you want — weekly, daily, or
+            whenever you have new data. Each upload is stored and combined
+            when you run analysis.
           </p>
         </div>
       </div>
@@ -299,13 +392,15 @@ export default function BusinessDashboard() {
       <ZohoConnectBanner slug={slug} />
       <IntegrationManagementBlock />
 
-      {/* Anchor badge — shown directly below the nav controls, above the report */}
       {anchor.anchorStatus && anchor.monthYear && (
         <div
           className="rounded-[var(--radius-md)] border px-4 py-3"
           style={{ borderColor: "var(--line)", background: "white" }}
         >
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: "var(--sage)" }}>
+          <p
+            className="text-[10px] font-bold uppercase tracking-[0.14em] mb-2"
+            style={{ color: "var(--sage)" }}
+          >
             Report integrity
           </p>
           <AnchorBadge
@@ -328,9 +423,16 @@ export default function BusinessDashboard() {
             flagResponses={data.flagResponses ?? {}}
             initialVisibleCount={3}
             title="What needs your eyes"
+            evidencePanelRef={evidencePanelRef}
+            txCountByFlag={txCountByFlag}
           />
           <ActionPlan items={data.report.followup_workflow} slug={slug} />
-          <EvidencePanel report={data.report} />
+          <EvidencePanel
+            ref={evidencePanelRef}
+            report={data.report}
+            slug={slug}
+            flagResponses={data.flagResponses ?? {}}
+          />
         </>
       )}
 
@@ -339,30 +441,49 @@ export default function BusinessDashboard() {
         className="rounded-[var(--radius-lg)] border p-6"
         style={{ borderColor: "var(--line)", background: "white" }}
       >
-        <p className="text-xs font-bold uppercase tracking-[0.18em]" style={{ color: "var(--savanna)" }}>
+        <p
+          className="text-xs font-bold uppercase tracking-[0.18em]"
+          style={{ color: "var(--savanna)" }}
+        >
           How Dohtective gets your data
         </p>
-        <h3 className="font-display mt-1.5 text-base font-bold" style={{ color: "var(--ink)" }}>
+        <h3
+          className="font-display mt-1.5 text-base font-bold"
+          style={{ color: "var(--ink)" }}
+        >
           Two ways to keep your analysis current
         </h3>
-
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div
             className="rounded-[var(--radius-md)] border p-4"
             style={{ borderColor: "var(--line)", background: "var(--bone)" }}
           >
-            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--savanna)" }}>
+            <p
+              className="text-xs font-bold uppercase tracking-wider"
+              style={{ color: "var(--savanna)" }}
+            >
               Automated — Zoho Books
             </p>
-            <p className="mt-1.5 text-xs leading-5" style={{ color: "var(--sage)" }}>
-              Connect your Zoho Books account and Dohtective pulls your transactions
-              automatically every time you load this dashboard. No manual uploads needed.
+            <p
+              className="mt-1.5 text-xs leading-5"
+              style={{ color: "var(--sage)" }}
+            >
+              Connect your Zoho Books account and Dohtective pulls your
+              transactions automatically every time you load this dashboard.
+              No manual uploads needed.
             </p>
             {zohoConnected ? (
-              <p className="mt-2 text-xs font-semibold" style={{ color: "var(--savanna)" }}>✓ Connected</p>
+              <p
+                className="mt-2 text-xs font-semibold"
+                style={{ color: "var(--savanna)" }}
+              >
+                ✓ Connected
+              </p>
             ) : (
               <button
-                onClick={() => { window.location.href = `/api/zoho/oauth/start?slug=${slug}`; }}
+                onClick={() => {
+                  window.location.href = `/api/zoho/oauth/start?slug=${slug}`;
+                }}
                 className="mt-3 font-display text-xs font-bold uppercase tracking-[0.06em] text-white px-3 py-1.5 rounded-[var(--radius-md)] transition hover:opacity-90"
                 style={{ background: "var(--savanna)" }}
               >
@@ -370,23 +491,32 @@ export default function BusinessDashboard() {
               </button>
             )}
           </div>
-
           <div
             className="rounded-[var(--radius-md)] border p-4"
             style={{ borderColor: "var(--line)", background: "var(--bone)" }}
           >
-            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--ink)" }}>
+            <p
+              className="text-xs font-bold uppercase tracking-wider"
+              style={{ color: "var(--ink)" }}
+            >
               Manual — Statements & Exports
             </p>
-            <p className="mt-1.5 text-xs leading-5" style={{ color: "var(--sage)" }}>
-              Upload M-Pesa statements, bank statements, or CSV exports whenever you
-              have new data — daily, weekly, or monthly. All files are stored and
-              combined when you run analysis.
+            <p
+              className="mt-1.5 text-xs leading-5"
+              style={{ color: "var(--sage)" }}
+            >
+              Upload M-Pesa statements, bank statements, or CSV exports
+              whenever you have new data — daily, weekly, or monthly. All
+              files are stored and combined when you run analysis.
             </p>
             <button
               onClick={() => router.push(`/business/${slug}/documents`)}
               className="mt-3 font-display text-xs font-bold uppercase tracking-[0.06em] px-3 py-1.5 rounded-[var(--radius-md)] border transition hover:opacity-80"
-              style={{ borderColor: "var(--line)", color: "var(--ink)", background: "white" }}
+              style={{
+                borderColor: "var(--line)",
+                color: "var(--ink)",
+                background: "white",
+              }}
             >
               Manage your files →
             </button>
