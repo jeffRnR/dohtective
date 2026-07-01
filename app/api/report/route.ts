@@ -8,7 +8,10 @@ const DETECTION_SERVICE_URL =
 export async function GET(req: Request) {
   const orgParam = new URL(req.url).searchParams.get("org");
   if (!orgParam) {
-    return NextResponse.json({ error: "Missing org parameter." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Missing org parameter." },
+      { status: 400 },
+    );
   }
 
   let business;
@@ -97,7 +100,7 @@ export async function GET(req: Request) {
           `Tried: ${DETECTION_SERVICE_URL}/analyze`,
         detail: err instanceof Error ? err.message : String(err),
       },
-      { status: 502 }
+      { status: 502 },
     );
   }
 
@@ -105,7 +108,7 @@ export async function GET(req: Request) {
     const detail = await analyzeResponse.text();
     return NextResponse.json(
       { error: "Detection engine returned an error.", detail },
-      { status: analyzeResponse.status }
+      { status: analyzeResponse.status },
     );
   }
 
@@ -122,14 +125,14 @@ export async function GET(req: Request) {
   });
 
   const snapshotData = {
-    cashBufferDays: report.cash_buffer_days as number,
-    cashBufferRiskLevel: report.cash_buffer_risk_level as string,
-    totalCashInflows: report.total_cash_inflows as number,
-    totalCashOutflows: report.total_cash_outflows as number,
-    mixedFundsCount: report.mixed_funds_count as number,
-    mixedFundsTotal: report.mixed_funds_total as number,
-    flagsJson: report.flags as object,
-    plainLanguageJson: report.plain_language as object,
+    cashBufferDays: (report.cash_buffer_days as number) ?? 0,
+    cashBufferRiskLevel: (report.cash_buffer_risk_level as string) ?? "unknown",
+    totalCashInflows: (report.total_cash_inflows as number) ?? 0,
+    totalCashOutflows: (report.total_cash_outflows as number) ?? 0,
+    mixedFundsCount: (report.mixed_funds_count as number) ?? 0,
+    mixedFundsTotal: (report.mixed_funds_total as number) ?? 0,
+    flagsJson: (report.flags as object) ?? [],
+    plainLanguageJson: (report.plain_language as object) ?? [],
   };
 
   if (existingThisMonth) {
@@ -137,7 +140,10 @@ export async function GET(req: Request) {
       where: { id: existingThisMonth.id },
       data: snapshotData,
     });
-  } else if (report.cash_buffer_days !== undefined) {
+  } else if (
+    report.cash_buffer_days !== undefined &&
+    report.cash_buffer_days !== null
+  ) {
     await prisma.reportSnapshot.create({
       data: { businessId: business.id, ...snapshotData },
     });
@@ -167,7 +173,9 @@ export async function GET(req: Request) {
 
   // Shape flag responses as a lookup map keyed by flagTitle so the
   // frontend can do O(1) lookups per flag without iterating the array.
-  const flagResponseMap: { [key: string]: { response: string; respondedAt: string } } = {};
+  const flagResponseMap: {
+    [key: string]: { response: string; respondedAt: string };
+  } = {};
   for (const fr of flagResponses) {
     flagResponseMap[fr.flagTitle] = {
       response: fr.response,
@@ -181,9 +189,7 @@ export async function GET(req: Request) {
       period_start:
         shapedTransactions[0]?.date ?? now.toISOString().slice(0, 10),
       period_end: now.toISOString().slice(0, 10),
-      branches: Array.from(
-        new Set(shapedTransactions.map((t) => t.branch))
-      ),
+      branches: Array.from(new Set(shapedTransactions.map((t) => t.branch))),
       currency: business.currency,
     },
     transactions: shapedTransactions,

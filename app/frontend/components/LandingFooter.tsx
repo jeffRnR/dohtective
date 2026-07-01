@@ -61,7 +61,7 @@ export default function LandingFooter() {
           className="mt-10 flex flex-col gap-3 border-t pt-6 text-xs sm:flex-row sm:items-center sm:justify-between"
           style={{ borderColor: "var(--line)", color: "var(--sage)" }}
         >
-          <p>(c) {new Date().getFullYear()} Dohtective. Built for the Kuzana x MiniHack Builder Bounty Programme.</p>
+          <p>(c) {new Date().getFullYear()} Dohtective.</p>
           <p>Made for Kenyan SMEs.</p>
         </div>
       </div>

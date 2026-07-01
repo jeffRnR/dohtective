@@ -1,4 +1,3 @@
-// /app/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -27,7 +26,9 @@ export default function Home() {
     }
   }, []);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
 
@@ -39,8 +40,6 @@ export default function Home() {
     formData.append("document_kind", "mpesa");
 
     try {
-      // Routes through Next.js API to avoid CORS and hardcoded ports.
-      // The actual service URL lives in DETECTION_SERVICE_URL env var.
       const response = await fetch("/api/analyze/standalone-document", {
         method: "POST",
         body: formData,
@@ -49,20 +48,24 @@ export default function Home() {
       if (!response.ok) {
         const errBody = await response.json().catch(() => ({}));
         throw new Error(
-          errBody.detail ?? errBody.error ?? errBody.message
-            ?? `Service returned ${response.status} — check that the Python service is running and this PDF is an M-Pesa statement.`
+          errBody.detail ??
+            errBody.error ??
+            errBody.message ??
+            `Service returned ${response.status}.`
         );
       }
 
       const data = await response.json();
       setReportData(data.report);
-      sessionStorage.setItem("latest_mpesa_report", JSON.stringify(data.report));
+      sessionStorage.setItem(
+        "latest_mpesa_report",
+        JSON.stringify(data.report)
+      );
     } catch (error) {
-      console.error("Sandbox parsing error:", error);
       setSandboxError(
         error instanceof Error
           ? error.message
-          : "Couldn't reach the analysis engine. Make sure the Python service is running."
+          : "Could not reach the analysis engine."
       );
     } finally {
       setLoading(false);
@@ -75,57 +78,124 @@ export default function Home() {
     sessionStorage.removeItem("latest_mpesa_report");
   };
 
+  // Severity colour for sandbox flags
+  const flagBg = (severity: string) =>
+    severity === "high" ? "var(--clay-dim)" : "var(--marigold-dim)";
+  const flagDot = (severity: string) =>
+    severity === "high" ? "var(--clay)" : "var(--marigold)";
+
+  const bufferDays =
+    reportData?.cash_buffer_days !== null &&
+    reportData?.cash_buffer_days !== undefined
+      ? reportData.cash_buffer_days
+      : null;
+
   return (
     <div className="min-h-screen" style={{ background: "var(--bone)" }}>
       <LandingNav isSignedIn={isSignedIn} />
 
       <main className="mx-auto max-w-6xl px-5 sm:px-8">
 
-        {/* Hero */}
-        <section className="grid gap-10 py-16 sm:py-24 lg:grid-cols-[1.2fr_1fr] lg:items-center">
+        {/* ── Hero ──────────────────────────────────────────────────── */}
+        <section className="grid gap-12 py-16 sm:py-24 lg:grid-cols-[1.15fr_1fr] lg:items-center">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em]" style={{ color: "var(--savanna)" }}>
-              For growing Kenyan businesses
+            <p
+              className="text-xs font-bold uppercase tracking-[0.18em]"
+              style={{ color: "var(--savanna)" }}
+            >
+              AI Financial Controller for Kenyan SMEs
             </p>
-            <h1 className="font-display mt-3 text-4xl font-bold leading-[1.1] sm:text-5xl lg:text-6xl" style={{ color: "var(--ink)" }}>
-              Know what's wrong with your books before your accountant does.
+            <h1
+              className="font-display mt-3 text-4xl font-bold leading-[1.08] sm:text-5xl lg:text-6xl"
+              style={{ color: "var(--ink)" }}
+            >
+              Know what's wrong with your books before real damage is done.
             </h1>
-            <p className="mt-5 max-w-xl text-base leading-7 sm:text-lg" style={{ color: "var(--sage)" }}>
-              Most financial problems don't appear overnight. They quietly build up in your
-              transactions for weeks before anyone notices. Dohtective reads your books every
-              month and tells you what needs attention — in plain language, not accountant-speak.
+            <p
+              className="mt-5 max-w-xl text-base leading-7 sm:text-lg"
+              style={{ color: "var(--sage)" }}
+            >
+              Dohtective automatically reviews your finances every month,
+              flags problems before they become crises, and gives you a
+              structured action plan in plain language, not accountant-speak.
+              Connect Zoho Books or upload your M-Pesa and bank statements.
+              That's it.
             </p>
+
+            {/* Trust signals */}
+            <div
+              className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-xs font-semibold"
+              style={{ color: "var(--sage)" }}
+            >
+              {[
+                "Connects to Zoho Books",
+                "Reads M-Pesa & bank statements",
+                "Report anchored on Avalanche",
+                "Plain-language output",
+              ].map((item) => (
+                <span key={item} className="flex items-center gap-1.5">
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ background: "var(--savanna)" }}
+                  />
+                  {item}
+                </span>
+              ))}
+            </div>
+
             <div className="mt-8 flex flex-wrap gap-3">
               <a
                 href={isSignedIn ? "/businesses" : "/sign-up"}
                 className="font-display rounded-[var(--radius-md)] px-6 py-3.5 text-sm font-bold uppercase tracking-[0.06em] text-white transition hover:opacity-90"
                 style={{ background: "var(--savanna)" }}
               >
-                {isSignedIn ? "Go to my businesses" : "Get started free"} &rarr;
+                {isSignedIn ? "Go to my businesses" : "Start for free"}
               </a>
               <a
                 href="/pricing"
-                className="font-display rounded-[var(--radius-md)] border px-6 py-3.5 text-sm font-bold uppercase tracking-[0.06em] transition hover:border-[var(--savanna)]"
-                style={{ borderColor: "var(--line)", color: "var(--ink)", background: "white" }}
+                className="font-display rounded-[var(--radius-md)] border px-6 py-3.5 text-sm font-bold uppercase tracking-[0.06em] transition hover:opacity-80"
+                style={{
+                  borderColor: "var(--line)",
+                  color: "var(--ink)",
+                  background: "white",
+                }}
               >
                 See pricing
               </a>
             </div>
-            <p className="mt-4 text-xs" style={{ color: "var(--sage)" }}>
-              Built for real Kenyan SME books — the kind with M-Pesa exports, mixed accounts, and an accountant who comes once a month.
-            </p>
+            {/* <p className="mt-4 text-xs" style={{ color: "var(--sage)" }}>
+              No credit card. Works with your existing Zoho Books setup or
+              just a PDF.
+            </p> */}
           </div>
 
           {/* Sandbox */}
-          <div className="rounded-[var(--radius-lg)] border p-6 shadow-sm" style={{ borderColor: "var(--line)", background: "white" }}>
-            <div className="flex justify-between items-start mb-2">
-              <p className="text-xs font-bold uppercase tracking-[0.14em]" style={{ color: "var(--sage)" }}>
-                {reportData ? "Your results" : "Try it now — no sign-up"}
-              </p>
+          <div
+            className="rounded-[var(--radius-lg)] border shadow-sm"
+            style={{ borderColor: "var(--line)", background: "white" }}
+          >
+            {/* Sandbox header */}
+            <div
+              className="flex items-center justify-between px-6 pt-5 pb-4 border-b"
+              style={{ borderColor: "var(--line)" }}
+            >
+              <div>
+                <p
+                  className="text-xs font-bold uppercase tracking-[0.14em]"
+                  style={{ color: "var(--sage)" }}
+                >
+                  {reportData ? "Your results" : "Try it — no sign-up needed"}
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: "var(--sage)" }}>
+                  {reportData
+                    ? "Real analysis from your file"
+                    : "Upload an M-Pesa PDF and see what we find"}
+                </p>
+              </div>
               {reportData && (
                 <button
                   onClick={clearSandboxCache}
-                  className="text-xs font-semibold underline hover:text-[var(--clay)] transition"
+                  className="text-xs font-semibold underline underline-offset-2 transition hover:opacity-70"
                   style={{ color: "var(--sage)" }}
                 >
                   Clear
@@ -133,195 +203,685 @@ export default function Home() {
               )}
             </div>
 
-            {loading ? (
-              <div className="py-8 text-center">
-                <p className="font-display text-4xl font-bold tracking-tight" style={{ color: "var(--savanna)" }}>
-                  Reading...
-                </p>
-                <p className="text-xs mt-2 max-w-xs mx-auto leading-relaxed" style={{ color: "var(--sage)" }}>
-                  Going through your transactions. This takes a few seconds.
-                </p>
-              </div>
-            ) : (
-              <>
-                <p className="font-display mt-1 text-5xl font-bold" style={{ color: "var(--savanna)" }}>
-                  {reportData
-                    ? (reportData.cash_buffer?.buffer_days === 9999 ? "∞" : reportData.cash_buffer?.buffer_days ?? "0")
-                    : "23"}
-                  <span className="text-2xl font-sans font-normal text-slate-500"> days of runway</span>
-                </p>
-
-                {sandboxError && (
-                  <div
-                    className="mt-4 rounded-[var(--radius-md)] border p-3.5 text-xs font-medium"
-                    style={{ borderColor: "var(--clay)", background: "var(--clay-dim)", color: "var(--clay)" }}
+            <div className="px-6 py-5">
+              {loading ? (
+                <div className="py-10 text-center">
+                  <p
+                    className="font-display text-3xl font-bold"
+                    style={{ color: "var(--savanna)" }}
                   >
-                    {sandboxError}
+                    Reading your file...
+                  </p>
+                  <p
+                    className="mt-2 text-xs leading-6 max-w-xs mx-auto"
+                    style={{ color: "var(--sage)" }}
+                  >
+                    We're going through your transactions now. This usually
+                    takes under 10 seconds.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Cash buffer display */}
+                  <div className="flex items-end gap-3">
+                    <p
+                      className="font-display text-5xl font-bold tabular-nums"
+                      style={{ color: "var(--savanna)" }}
+                    >
+                      {bufferDays === null
+                        ? "?"
+                        : bufferDays >= 365
+                        ? "365+"
+                        : bufferDays}
+                    </p>
+                    <div className="pb-1.5">
+                      <p
+                        className="text-sm font-semibold"
+                        style={{ color: "var(--ink)" }}
+                      >
+                        days of cash runway
+                      </p>
+                      <p className="text-xs" style={{ color: "var(--sage)" }}>
+                        {reportData
+                          ? bufferDays === null
+                            ? "Could not estimate — see report for details"
+                            : bufferDays < 14
+                            ? "Needs attention now"
+                            : bufferDays < 30
+                            ? "Worth watching this month"
+                            : "Looking healthy"
+                          : "Example — connect your books for the real number"}
+                      </p>
+                    </div>
                   </div>
-                )}
 
-                <div className="mt-5 space-y-2.5 border-t pt-5" style={{ borderColor: "var(--line)" }}>
-                  {reportData ? (
-                    reportData.flags && reportData.flags.length > 0 ? (
-                      reportData.flags.map((flag: any, index: number) => (
+                  {sandboxError && (
+                    <div
+                      className="mt-4 rounded-[var(--radius-md)] border p-3.5 text-xs font-medium"
+                      style={{
+                        borderColor: "var(--clay)",
+                        background: "var(--clay-dim)",
+                        color: "var(--clay)",
+                      }}
+                    >
+                      {sandboxError}
+                    </div>
+                  )}
+
+                  {/* Flags */}
+                  <div
+                    className="mt-5 space-y-2 border-t pt-4"
+                    style={{ borderColor: "var(--line)" }}
+                  >
+                    <p
+                      className="text-xs font-bold uppercase tracking-[0.1em] mb-3"
+                      style={{ color: "var(--sage)" }}
+                    >
+                      {reportData ? "Flags from your file" : "Example flags"}
+                    </p>
+
+                    {reportData ? (
+                      reportData.flags && reportData.flags.length > 0 ? (
+                        reportData.flags.slice(0, 3).map(
+                          (flag: any, index: number) => (
+                            <div
+                              key={index}
+                              className="flex items-start gap-3 rounded-[var(--radius-md)] px-4 py-3 text-left"
+                              style={{
+                                background: flagBg(flag.severity),
+                              }}
+                            >
+                              <span
+                                className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+                                style={{ background: flagDot(flag.severity) }}
+                              />
+                              <div>
+                                <p
+                                  className="text-sm font-semibold"
+                                  style={{ color: "var(--ink)" }}
+                                >
+                                  {flag.title}
+                                </p>
+                                <p
+                                  className="mt-0.5 text-xs leading-5"
+                                  style={{ color: "var(--sage)" }}
+                                >
+                                  {flag.detail}
+                                </p>
+                              </div>
+                            </div>
+                          )
+                        )
+                      ) : (
+                        <p
+                          className="text-sm py-4 text-center italic"
+                          style={{ color: "var(--sage)" }}
+                        >
+                          Nothing flagged — your books look clean this period.
+                        </p>
+                      )
+                    ) : (
+                      <>
                         <div
-                          key={index}
                           className="flex items-start gap-3 rounded-[var(--radius-md)] px-4 py-3 text-left"
-                          style={{ background: flag.risk_score > 50 ? "var(--clay-dim)" : "var(--marigold-dim)" }}
+                          style={{ background: "var(--marigold-dim)" }}
                         >
                           <span
                             className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                            style={{ background: flag.risk_score > 50 ? "var(--clay)" : "var(--marigold)" }}
+                            style={{ background: "var(--marigold)" }}
                           />
                           <div>
-                            <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>{flag.title}</p>
-                            <p className="mt-0.5 text-xs" style={{ color: "var(--sage)" }}>{flag.detail}</p>
+                            <p
+                              className="text-sm font-semibold"
+                              style={{ color: "var(--ink)" }}
+                            >
+                              Personal spending mixed with business
+                            </p>
+                            <p
+                              className="mt-0.5 text-xs"
+                              style={{ color: "var(--sage)" }}
+                            >
+                              Worth a look — might just be an owner draw
+                            </p>
                           </div>
                         </div>
-                      ))
-                    ) : (
-                      <p className="text-sm py-4 text-center italic" style={{ color: "var(--sage)" }}>
-                        Nothing flagged — looks clean.
-                      </p>
-                    )
-                  ) : (
-                    <>
-                      <div className="flex items-start gap-3 rounded-[var(--radius-md)] px-4 py-3 text-left" style={{ background: "var(--marigold-dim)" }}>
-                        <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: "var(--marigold)" }} />
-                        <div>
-                          <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>Personal spending mixed with business</p>
-                          <p className="mt-0.5 text-xs" style={{ color: "var(--sage)" }}>Worth a look — might just be an owner draw</p>
+                        <div
+                          className="flex items-start gap-3 rounded-[var(--radius-md)] px-4 py-3 text-left"
+                          style={{ background: "var(--clay-dim)" }}
+                        >
+                          <span
+                            className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+                            style={{ background: "var(--clay)" }}
+                          />
+                          <div>
+                            <p
+                              className="text-sm font-semibold"
+                              style={{ color: "var(--ink)" }}
+                            >
+                              Possible duplicate payment — KES 89,500
+                            </p>
+                            <p
+                              className="mt-0.5 text-xs"
+                              style={{ color: "var(--sage)" }}
+                            >
+                              Same supplier, same amount, 3 days apart
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-start gap-3 rounded-[var(--radius-md)] px-4 py-3 text-left" style={{ background: "var(--clay-dim)" }}>
-                        <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: "var(--clay)" }} />
-                        <div>
-                          <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>Payment sent twice to the same recipient</p>
-                          <p className="mt-0.5 text-xs" style={{ color: "var(--sage)" }}>Same amount, 3 days apart — probably a duplicate</p>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
+                      </>
+                    )}
+                  </div>
 
-                <div className="mt-5 pt-4 border-t border-dashed flex flex-col gap-2" style={{ borderColor: "var(--line)" }}>
-                  <label className="text-xs font-bold uppercase tracking-wider text-left block" style={{ color: "var(--sage)" }}>
-                    {reportData ? "Try another statement:" : "Drop an M-Pesa PDF to see what we find:"}
-                  </label>
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    onChange={handleFileChange}
-                    className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-[var(--radius-md)] file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer w-full"
-                  />
-                </div>
-              </>
-            )}
+                  {/* Upload */}
+                  <div
+                    className="mt-5 pt-4 border-t border-dashed"
+                    style={{ borderColor: "var(--line)" }}
+                  >
+                    <label
+                      className="cursor-pointer block"
+                      style={{ color: "var(--sage)" }}
+                    >
+                      <span
+                        className="inline-block font-display text-xs font-bold uppercase tracking-[0.06em] text-white px-4 py-2 rounded-[var(--radius-md)] transition hover:opacity-90"
+                        style={{ background: "var(--ink)" }}
+                      >
+                        {reportData
+                          ? "Try another file"
+                          : "Upload M-Pesa PDF"}
+                      </span>
+                      <input
+                        type="file"
+                        accept=".pdf,.csv,.xlsx"
+                        onChange={handleFileChange}
+                        className="sr-only"
+                      />
+                    </label>
+                    <p className="mt-2 text-xs" style={{ color: "var(--sage)" }}>
+                      M-Pesa PDF, bank statement, or CSV — no account needed
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </section>
 
-        {/* What it catches */}
-        <section className="border-t py-16 sm:py-20" style={{ borderColor: "var(--line)" }}>
-          <p className="text-xs font-bold uppercase tracking-[0.18em]" style={{ color: "var(--savanna)" }}>
-            What it looks for
-          </p>
-          <h2 className="font-display mt-2 max-w-2xl text-3xl font-bold leading-tight" style={{ color: "var(--ink)" }}>
-            We focused on the four things that actually hurt Kenyan SMEs.
-          </h2>
-          <p className="mt-4 max-w-2xl text-base leading-7" style={{ color: "var(--sage)" }}>
-            Not a generic checklist — these are the patterns that consistently show up in businesses
-            that hit a financial wall they didn't see coming.
-          </p>
+        {/* ── The problem ───────────────────────────────────────────── */}
+        <section
+          className="border-t py-16 sm:py-20"
+          style={{ borderColor: "var(--line)" }}
+        >
+          <div className="max-w-2xl">
+            <p
+              className="text-xs font-bold uppercase tracking-[0.18em]"
+              style={{ color: "var(--savanna)" }}
+            >
+              The problem
+            </p>
+            <h2
+              className="font-display mt-2 text-3xl font-bold leading-tight"
+              style={{ color: "var(--ink)" }}
+            >
+              Most financial problems don't announce themselves.
+            </h2>
+            <p
+              className="mt-4 text-base leading-7"
+              style={{ color: "var(--sage)" }}
+            >
+              They build quietly in your transactions for weeks. Mixed funds
+              here, a duplicate payment there, a cash runway that's tighter
+              than you think. Your accountant comes once a month. Your
+              investor asks questions quarterly. The problem has been there
+              the whole time, you just didn't have a system looking for it.
+            </p>
+          </div>
 
           <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { title: "Mixed funds", detail: "Personal money flowing through the business account. Common, quiet, and easy to miss until tax season." },
-              { title: "Duplicate payments", detail: "Same supplier, same amount, paid twice. Happens more than anyone admits." },
-              { title: "Cash runway", detail: "How many days of spending you can cover without new income coming in. Updated every month." },
-              { title: "Unreconciled entries", detail: "What's in your books but not your bank, or the other way around. In plain language." },
+              {
+                title: "Mixed funds",
+                detail:
+                  "Personal money flowing through the business account. Common, quiet, and expensive to fix at tax time.",
+                color: "var(--clay)",
+              },
+              {
+                title: "Duplicate payments",
+                detail:
+                  "Same supplier, same amount, paid twice within days. Happens in every business. Almost never caught early.",
+                color: "var(--marigold)",
+              },
+              {
+                title: "Cash runway",
+                detail:
+                  "How many days you can cover expenses without new income. The number most founders don't know until it's urgent.",
+                color: "var(--clay)",
+              },
+              {
+                title: "Unreconciled entries",
+                detail:
+                  "What's recorded in your books but missing from your bank, or the other way around. In plain language.",
+                color: "var(--marigold)",
+              },
             ].map((item) => (
-              <div key={item.title} className="rounded-[var(--radius-lg)] border p-5 text-left" style={{ borderColor: "var(--line)", background: "white" }}>
-                <p className="font-display text-base font-bold" style={{ color: "var(--ink)" }}>{item.title}</p>
-                <p className="mt-2 text-sm leading-6" style={{ color: "var(--sage)" }}>{item.detail}</p>
+              <div
+                key={item.title}
+                className="rounded-[var(--radius-lg)] border p-5 text-left"
+                style={{ borderColor: "var(--line)", background: "white" }}
+              >
+                <span
+                  className="inline-block h-2 w-2 rounded-full mb-3"
+                  style={{ background: item.color }}
+                />
+                <p
+                  className="font-display text-base font-bold"
+                  style={{ color: "var(--ink)" }}
+                >
+                  {item.title}
+                </p>
+                <p
+                  className="mt-2 text-sm leading-6"
+                  style={{ color: "var(--sage)" }}
+                >
+                  {item.detail}
+                </p>
               </div>
             ))}
           </div>
         </section>
 
-        {/* How it works */}
-        <section className="border-t py-16 sm:py-20" style={{ borderColor: "var(--line)" }}>
-          <p className="text-xs font-bold uppercase tracking-[0.18em]" style={{ color: "var(--savanna)" }}>
+        {/* ── How it works ──────────────────────────────────────────── */}
+        <section
+          id="how-it-works"
+          className="border-t py-16 sm:py-20"
+          style={{ borderColor: "var(--line)" }}
+        >
+          <p
+            className="text-xs font-bold uppercase tracking-[0.18em]"
+            style={{ color: "var(--savanna)" }}
+          >
             How it works
           </p>
-          <h2 className="font-display mt-2 text-3xl font-bold" style={{ color: "var(--ink)" }}>
-            Connect once. Get a clear picture every month.
+          <h2
+            className="font-display mt-2 text-3xl font-bold"
+            style={{ color: "var(--ink)" }}
+          >
+            Automatic monthly review. No new habits required.
           </h2>
+          <p
+            className="mt-3 max-w-xl text-base leading-7"
+            style={{ color: "var(--sage)" }}
+          >
+            Two ways to get your data in. One structured risk report out.
+            A follow-up workflow your accountant can act on directly.
+          </p>
 
-          <div className="mt-10 grid gap-6 sm:grid-cols-3">
+          <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {[
               {
                 step: "01",
-                title: "Connect your books",
-                detail: "Link Zoho Books via OAuth — we never see your password. Or just upload a CSV or bank PDF if you're not on Zoho yet.",
+                title: "Connect your data source",
+                detail:
+                  "Link Zoho Books via OAuth for automatic syncing, we never see your password. Or upload M-Pesa statements, bank exports, or Excel files directly. Both paths produce identical analysis.",
               },
               {
                 step: "02",
-                title: "Add documents if you have them",
-                detail: "KRA PIN, bank statements, eTIMS receipts — optional. Each one helps us give you a sharper picture.",
+                title: "Add supporting documents",
+                detail:
+                  "Bank statements, mpesa statements, financial Excel records, optional but each one sharpens the picture. Dohtective reads them alongside your transaction data.",
               },
               {
                 step: "03",
-                title: "Get your monthly read",
-                detail: "Plain language, a prioritised action list, and a push to Google Sheets your accountant can work from directly.",
+                title: "Get your monthly risk report",
+                detail:
+                  "Plain-language flags, a cash runway estimate, a prioritised action list, and a push to Google Sheets your accountant can work from directly.",
               },
             ].map((item) => (
               <div key={item.step} className="text-left">
-                <span className="font-mono text-xs font-semibold" style={{ color: "var(--sage)" }}>{item.step}</span>
-                <p className="font-display mt-1.5 text-lg font-bold" style={{ color: "var(--ink)" }}>{item.title}</p>
-                <p className="mt-2 text-sm leading-6" style={{ color: "var(--sage)" }}>{item.detail}</p>
+                <span
+                  className="font-mono text-xs font-semibold"
+                  style={{ color: "var(--sage)" }}
+                >
+                  {item.step}
+                </span>
+                <p
+                  className="font-display mt-1.5 text-lg font-bold"
+                  style={{ color: "var(--ink)" }}
+                >
+                  {item.title}
+                </p>
+                <p
+                  className="mt-2 text-sm leading-6"
+                  style={{ color: "var(--sage)" }}
+                >
+                  {item.detail}
+                </p>
               </div>
             ))}
           </div>
         </section>
 
-        {/* Trust */}
-        <section className="border-t py-16 sm:py-20" style={{ borderColor: "var(--line)" }}>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="text-left">
-              <p className="text-xs font-bold uppercase tracking-[0.18em]" style={{ color: "var(--savanna)" }}>
+        {/* ── Financial credential (new section) ───────────────────── */}
+        <section
+          className="border-t py-16 sm:py-20"
+          style={{ borderColor: "var(--line)" }}
+        >
+          <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
+            <div>
+              <p
+                className="text-xs font-bold uppercase tracking-[0.18em]"
+                style={{ color: "var(--savanna)" }}
+              >
+                More than a report
+              </p>
+              <h2
+                className="font-display mt-2 text-3xl font-bold leading-tight"
+                style={{ color: "var(--ink)" }}
+              >
+                Your Dohtective report is a verified financial credential.
+              </h2>
+              <p
+                className="mt-4 text-base leading-7"
+                style={{ color: "var(--sage)" }}
+              >
+                Every report is cryptographically anchored on Avalanche the
+                moment it's generated. The blockchain timestamp proves it was
+                created before your loan application, not for it. The hash
+                proves it hasn't been altered. A bank, lender, or investor
+                can verify it themselves, they don't need to trust us.
+              </p>
+              <p
+                className="mt-3 text-base leading-7"
+                style={{ color: "var(--sage)" }}
+              >
+                A formal audit costs KES 80,000–150,000 and takes 6 weeks.
+                Your anchored Dohtective report costs a fraction of that and
+                is ready the same day.
+              </p>
+              <div className="mt-6 space-y-3">
+                {[
+                  "Download a verification certificate to hand to a bank officer",
+                  "Share a verification link via WhatsApp or email",
+                  "Every report hash is permanently recorded on-chain",
+                ].map((item) => (
+                  <div key={item} className="flex items-start gap-3">
+                    <span
+                      className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ background: "var(--savanna)" }}
+                    />
+                    <p className="text-sm" style={{ color: "var(--ink)" }}>
+                      {item}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {/* Credential preview card */}
+              <div
+                className="rounded-[var(--radius-lg)] border p-6"
+                style={{ borderColor: "var(--line)", background: "white" }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p
+                      className="text-xs font-bold uppercase tracking-[0.1em]"
+                      style={{ color: "var(--savanna)" }}
+                    >
+                      Financial Health Report
+                    </p>
+                    <p
+                      className="font-display mt-1 text-base font-bold"
+                      style={{ color: "var(--ink)" }}
+                    >
+                      GearNova Electronics
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--sage)" }}>
+                      June 2026 {"\u00B7"} Verified on Avalanche
+                    </p>
+                  </div>
+                  <span
+                    className="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em]"
+                    style={{
+                      background: "var(--savanna-dim)",
+                      color: "var(--savanna)",
+                    }}
+                  >
+                    Anchored
+                  </span>
+                </div>
+                <div
+                  className="mt-4 pt-4 border-t space-y-2"
+                  style={{ borderColor: "var(--line)" }}
+                >
+                  <div className="flex justify-between text-xs">
+                    <span style={{ color: "var(--sage)" }}>Cash runway</span>
+                    <span
+                      className="font-semibold"
+                      style={{ color: "var(--ink)" }}
+                    >
+                      34 days
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span style={{ color: "var(--sage)" }}>Flags raised</span>
+                    <span
+                      className="font-semibold"
+                      style={{ color: "var(--clay)" }}
+                    >
+                      3 (1 high priority)
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span style={{ color: "var(--sage)" }}>
+                      On-chain hash
+                    </span>
+                    <span
+                      className="font-mono text-[10px]"
+                      style={{ color: "var(--sage)" }}
+                    >
+                      0x4a2f...9c8e
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <button
+                    className="flex-1 font-display text-xs font-bold uppercase tracking-[0.06em] text-white py-2 rounded-[var(--radius-md)] transition hover:opacity-90"
+                    style={{ background: "var(--ink)" }}
+                    onClick={() => {}}
+                  >
+                    Download certificate
+                  </button>
+                  <button
+                    className="font-display text-xs font-bold uppercase tracking-[0.06em] py-2 px-3 rounded-[var(--radius-md)] border transition hover:opacity-80"
+                    style={{
+                      borderColor: "var(--line)",
+                      color: "var(--ink)",
+                      background: "white",
+                    }}
+                    onClick={() => {}}
+                  >
+                    Share link
+                  </button>
+                </div>
+              </div>
+
+              <p className="text-xs text-center" style={{ color: "var(--sage)" }}>
+                Example only — your real report generates automatically after
+                connecting your data.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Who it's for ──────────────────────────────────────────── */}
+        <section
+          className="border-t py-16 sm:py-20"
+          style={{ borderColor: "var(--line)" }}
+        >
+          <p
+            className="text-xs font-bold uppercase tracking-[0.18em]"
+            style={{ color: "var(--savanna)" }}
+          >
+            Built for
+          </p>
+          <h2
+            className="font-display mt-2 text-3xl font-bold"
+            style={{ color: "var(--ink)" }}
+          >
+            The business that's past survival but not yet at scale.
+          </h2>
+
+          <div className="mt-10 grid gap-5 sm:grid-cols-3">
+            {[
+              {
+                title: "You're doing KES 400k+ a month",
+                detail:
+                  "Enough transactions that things get missed. Not enough to afford a full-time finance person. This is exactly the gap Dohtective fills.",
+              },
+              {
+                title: "Your accountant comes monthly",
+                detail:
+                  "They're good at what they do. But by the time they arrive, the problem is three weeks old. Dohtective catches it when it happens.",
+              },
+              {
+                title: "You're on Zoho Books or have statements",
+                detail:
+                  "Connect Zoho Books for automatic syncing, or upload your M-Pesa and bank statements directly. No migration, no new software to learn.",
+              },
+            ].map((item) => (
+              <div
+                key={item.title}
+                className="rounded-[var(--radius-lg)] border p-6"
+                style={{ borderColor: "var(--line)", background: "white" }}
+              >
+                <p
+                  className="font-display text-base font-bold"
+                  style={{ color: "var(--ink)" }}
+                >
+                  {item.title}
+                </p>
+                <p
+                  className="mt-2 text-sm leading-6"
+                  style={{ color: "var(--sage)" }}
+                >
+                  {item.detail}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Trust ─────────────────────────────────────────────────── */}
+        <section
+          className="border-t py-16 sm:py-20"
+          style={{ borderColor: "var(--line)" }}
+        >
+          <div className="grid gap-10 lg:grid-cols-2 lg:items-start">
+            <div>
+              <p
+                className="text-xs font-bold uppercase tracking-[0.18em]"
+                style={{ color: "var(--savanna)" }}
+              >
                 Honest by design
               </p>
-              <h2 className="font-display mt-2 text-2xl font-bold" style={{ color: "var(--ink)" }}>
-                We tell you how sure we are — and what we can't see.
+              <h2
+                className="font-display mt-2 text-2xl font-bold"
+                style={{ color: "var(--ink)" }}
+              >
+                We tell you what we found, how sure we are, and what we
+                couldn't see.
               </h2>
-              <p className="mt-4 text-sm leading-7" style={{ color: "var(--sage)" }}>
-                Dohtective doesn't tell you something is fraud. It tells you something is worth
-                a look, and how confident it is. Every flag comes with a confidence level so
-                you know the difference between "probably fine" and "check this today."
-                A tool that cries wolf stops getting used. We'd rather be honest.
+              <p
+                className="mt-4 text-sm leading-7"
+                style={{ color: "var(--sage)" }}
+              >
+                Dohtective doesn't say "fraud detected." It says "this
+                transaction is worth a look, and here's why." Every flag has
+                a confidence level. Every report tells you what data it was
+                built on and what it couldn't reach. A tool that cries wolf
+                gets ignored. We'd rather be accurate and honest.
               </p>
+              <div className="mt-6 space-y-3">
+                {[
+                  "Confidence level on every flag — high, medium, or low",
+                  "Plain-language explanation of what triggered each flag",
+                  "Data quality report before every analysis — you know what we had to work with",
+                  "Structured follow-up workflow for your accountant",
+                ].map((item) => (
+                  <div key={item} className="flex items-start gap-3">
+                    <span
+                      className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ background: "var(--savanna)" }}
+                    />
+                    <p className="text-sm" style={{ color: "var(--ink)" }}>
+                      {item}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
             <AvalancheTrustStrip />
           </div>
         </section>
 
-        {/* CTA */}
-        <section className="border-t py-16 text-center sm:py-20" style={{ borderColor: "var(--line)" }}>
-          <h2 className="font-display text-3xl font-bold max-w-2xl mx-auto leading-tight" style={{ color: "var(--ink)" }}>
-            Your next investor meeting shouldn't be the first time you hear about a problem.
-          </h2>
-          <a
-            href={isSignedIn ? "/businesses" : "/sign-up"}
-            className="font-display mt-7 inline-block rounded-[var(--radius-md)] px-7 py-4 text-sm font-bold uppercase tracking-[0.06em] text-white transition hover:opacity-90"
-            style={{ background: "var(--savanna)" }}
+        {/* ── CTA ───────────────────────────────────────────────────── */}
+        <section
+          className="border-t py-16 sm:py-20"
+          style={{ borderColor: "var(--line)" }}
+        >
+          <div
+            className="rounded-[var(--radius-lg)] border p-8 sm:p-12 text-center"
+            style={{ borderColor: "var(--savanna)", background: "var(--savanna-dim)" }}
           >
-            {isSignedIn ? "Go to my businesses" : "Get started free"} &rarr;
-          </a>
-          <p className="mt-4 text-xs" style={{ color: "var(--sage)" }}>
-            No credit card. No setup fee. Cancel whenever.
-          </p>
+            <p
+              className="text-xs font-bold uppercase tracking-[0.18em]"
+              style={{ color: "var(--savanna)" }}
+            >
+              Get started today
+            </p>
+            <h2
+              className="font-display mt-2 text-3xl font-bold max-w-2xl mx-auto leading-tight"
+              style={{ color: "var(--ink)" }}
+            >
+              Your next investor meeting shouldn't be the first time you
+              hear about a problem.
+            </h2>
+            <p
+              className="mt-4 max-w-lg mx-auto text-sm leading-6"
+              style={{ color: "var(--sage)" }}
+            >
+              Connect your books or upload a statement today. Dohtective
+              runs the analysis and gives you a structured report with a
+              follow-up workflow — ready to share with your accountant or
+              hand to a lender.
+            </p>
+            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <a
+                href={isSignedIn ? "/businesses" : "/sign-up"}
+                className="font-display w-full sm:w-auto rounded-[var(--radius-md)] px-8 py-4 text-sm font-bold uppercase tracking-[0.06em] text-white transition hover:opacity-90"
+                style={{ background: "var(--savanna)" }}
+              >
+                {isSignedIn ? "Go to my businesses" : "Start for free"}
+              </a>
+              <a
+                href="/pricing"
+                className="font-display w-full sm:w-auto rounded-[var(--radius-md)] border px-8 py-4 text-sm font-bold uppercase tracking-[0.06em] transition hover:opacity-80"
+                style={{
+                  borderColor: "var(--savanna)",
+                  color: "var(--ink)",
+                  background: "white",
+                }}
+              >
+                See pricing
+              </a>
+            </div>
+            <p className="mt-4 text-xs" style={{ color: "var(--sage)" }}>
+              No credit card. Works with Zoho Books, M-Pesa PDFs, bank
+              statements, and Excel exports.
+            </p>
+          </div>
         </section>
-
       </main>
 
       <LandingFooter />

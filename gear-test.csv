@@ -1,0 +1,14 @@
+date,ref,type,entity,category,amount,description
+2026-06-01,EXP-001,Expense,Safaricom Postpaid,Utilities,4500,Monthly postpaid bill
+2026-06-03,EXP-002,Expense,Nairobi Water,Utilities,2200,Water bill June
+2026-06-05,BILL-001,Expense,Apple Distributor,Stock,180000,MacBook inventory
+2026-06-05,BILL-002,Expense,Apple Distributor,Stock,180000,MacBook inventory
+2026-06-08,OD-001,Expense,Cash Withdrawal,Owner Draw,85000,Personal withdrawal
+2026-06-10,EXP-003,Expense,TotalEnergies,Fuel,8500,Delivery fuel
+2026-06-12,EXP-004,Expense,Unknown Transfer,Misc,45000,Night transfer unverified
+2026-06-15,EXP-005,Expense,Office Supplies Co,Office,3200,Stationery
+2026-06-02,INV-001,Income,Customer A,Sales,95000,MacBook Pro sale
+2026-06-07,INV-002,Income,Customer B,Sales,120000,iPhone bulk order
+2026-06-14,INV-003,Income,Customer C,Sales,67000,Accessories sale
+2026-06-20,INV-004,Income,Customer D,Sales,43000,Repair services
+2026-06-22,INV-005,Income,Customer E,Sales,28000,Small accessories

@@ -1,0 +1,16 @@
+Entry Number,Expense Date,Paid Through,Vendor Name,Currency Code,Exchange Rate,Expense Account,Expense Description,Expense Amount,Total,Expense Type,Reference#
+EXP-001,01/06/2026,KCB Business Account,Nairobi Realty Ltd,KES,1,Rent,June Shop Rent CBD,85000,85000,Goods,RENT-JUN
+EXP-002,01/06/2026,KCB Business Account,Safaricom Postpaid,KES,1,Utilities,Monthly Postpaid Business Line,4500,4500,Goods,UTIL-001
+EXP-003,03/06/2026,KCB Business Account,Nairobi Water,KES,1,Utilities,Water Bill June,2200,2200,Goods,UTIL-002
+EXP-004,05/06/2026,KCB Business Account,Apple Distributor EA,KES,1,Cost of Goods Sold,MacBook Pro Inventory Restock,180000,180000,Goods,BILL-001
+EXP-005,05/06/2026,KCB Business Account,Apple Distributor EA,KES,1,Cost of Goods Sold,MacBook Pro Inventory Restock,180000,180000,Goods,BILL-002
+EXP-006,08/06/2026,KCB Business Account,Munyi Personal Account,KES,1,Owner Draw,Cash Withdrawal Owner,85000,85000,Goods,OD-001
+EXP-007,10/06/2026,Petty Cash,TotalEnergies Kenya,KES,1,Fuel,Delivery Van Fuel,8500,8500,Goods,FUEL-001
+EXP-008,12/06/2026,KCB Business Account,Unknown Recipient,KES,1,Miscellaneous,Night Transfer Unverified,45000,45000,Goods,MISC-001
+EXP-009,15/06/2026,Petty Cash,TotalEnergies Kenya,KES,1,Office Supplies,Stationery and Toner,3200,3200,Goods,OFF-001
+EXP-010,18/06/2026,KCB Business Account,Kenya Power KPLC,KES,1,Utilities,Shop Electricity June,6800,6800,Goods,UTIL-003
+EXP-011,20/06/2026,KCB Business Account,Securex Ltd,KES,1,Security,Monthly Security Fee,12000,12000,Goods,SEC-001
+EXP-012,22/06/2026,KCB Business Account,DHL Kenya,KES,1,Logistics,Import Shipping Fee,18500,18500,Goods,LOG-001
+EXP-013,24/06/2026,KCB Business Account,Samsung Global,KES,1,Cost of Goods Sold,Samsung Galaxy S24 Bulk,220000,220000,Goods,BILL-003
+EXP-014,26/06/2026,KCB Business Account,Tech Solutions KE,KES,1,Professional Services,IT Support and Setup,45000,45000,Goods,SVC-001
+EXP-015,28/06/2026,KCB Business Account,NHIF Kenya,KES,1,Employee Benefits,Staff Health Insurance,7200,7200,Goods,NHIF-001

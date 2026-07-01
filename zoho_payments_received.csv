@@ -1,0 +1,6 @@
+Date,Payment Number,Customer Name,Amount,Payment Mode,Reference,Invoice Number,Notes
+14/06/2026,PAY-001,Mombasa Gadgets Ltd,135000,Bank Transfer,TXN-MGL-001,INV-1003,Full payment for iPad order
+22/06/2026,PAY-002,Parklands Accessories,185000,M-Pesa,MPESA-PAR-001,INV-1005,Full payment AirPods order
+25/06/2026,PAY-003,Westgate Electronics,87500,Cheque,CHQ-WGE-001,INV-1001,Partial payment MacBook order
+27/06/2026,PAY-004,Nairobi Tech Hub,155000,Bank Transfer,TXN-NTH-001,INV-1002,Partial payment iPhone order
+29/06/2026,PAY-005,Capital Office Solutions,95000,M-Pesa,MPESA-COS-001,INV-1004,Full payment MacBook Air

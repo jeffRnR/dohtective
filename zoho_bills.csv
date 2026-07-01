@@ -1,0 +1,11 @@
+Bill Number,Bill Date,Due Date,Bill Status,Vendor Name,Account,Description,Quantity,Rate,Amount
+BILL-S001,01/06/2026,15/06/2026,Open,Apple Distributor EA,Cost of Goods Sold,MacBook Pro 14" M3,10,87500,875000
+BILL-S002,03/06/2026,17/06/2026,Open,Samsung Global,Cost of Goods Sold,Samsung Galaxy S24 x20,20,22000,440000
+BILL-S003,05/06/2026,12/06/2026,Paid,DHL Kenya,Utilities,Water,1,18500,18500
+BILL-S004,08/06/2026,08/07/2026,Open,Securex Ltd,Professional Services,IT Support Retainer,1,12000,12000
+BILL-S005,10/06/2026,24/06/2026,Paid,Tech Solutions KE,Professional Services,IT Support Retainer,1,45000,45000
+BILL-S006,15/06/2026,25/06/2026,Paid,Kenya Power KPLC,Utilities,Electricity June,1,6800,6800
+BILL-S007,18/06/2026,01/07/2026,Open,Nairobi Realty Ltd,Rent Expense,Shop Rent July,1,85000,85000
+BILL-S008,20/06/2026,04/07/2026,Open,Apple Distributor EA,Cost of Goods Sold,iPhone 15 Pro x15,15,62000,930000
+BILL-S009,22/06/2026,29/06/2026,Paid,Office Supplies Co,Office Supplies,Stationery Restock,1,3200,3200
+BILL-S010,25/06/2026,30/06/2026,Paid,NHIF Kenya,Employee Benefits,Staff Health Cover June,1,7200,7200

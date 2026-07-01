@@ -1,0 +1,6 @@
+Date,Payment Number,Vendor Name,Amount,Payment Mode,Reference,Bill Number,Notes
+05/06/2026,PMNT-001,DHL Kenya,18500,Bank Transfer,TXN-DHL-001,BILL-S003,Freight payment
+10/06/2026,PMNT-002,Tech Solutions KE,45000,Bank Transfer,TXN-TSK-001,BILL-S005,IT support payment
+15/06/2026,PMNT-003,Kenya Power KPLC,6800,M-Pesa,MPESA-KPL-001,BILL-S006,Electricity payment
+22/06/2026,PMNT-004,Office Supplies Co,3200,Cash,CASH-OSC-001,BILL-S009,Stationery payment
+30/06/2026,PMNT-005,NHIF Kenya,7200,Bank Transfer,TXN-NHF-001,BILL-S010,Health cover payment
