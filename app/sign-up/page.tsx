@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import "../frontend/styles/tokens.css";
 import Loader from "../frontend/components/Loader";
 import { signIn } from "next-auth/react";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function SignUpPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,10 +27,11 @@ export default function SignUpPage() {
         body: JSON.stringify({ name, email, password }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not create your account.");
+      if (!res.ok)
+        throw new Error(data.error ?? "Could not create your account.");
       // Redirect to verification page — sign-in happens after verification
       router.push(
-        `/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`
+        `/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -64,8 +67,8 @@ export default function SignUpPage() {
           Create your account
         </h1>
         <p className="mt-1.5 text-sm" style={{ color: "var(--sage)" }}>
-          If someone already added you to a business, you will see it here
-          right after signing up.
+          If someone already added you to a business, you will see it here right
+          after signing up.
         </p>
 
         <button
@@ -82,7 +85,10 @@ export default function SignUpPage() {
 
         <div className="my-5 flex items-center gap-3">
           <span className="h-px flex-1" style={{ background: "var(--line)" }} />
-          <span className="text-xs font-semibold" style={{ color: "var(--sage)" }}>
+          <span
+            className="text-xs font-semibold"
+            style={{ color: "var(--sage)" }}
+          >
             OR
           </span>
           <span className="h-px flex-1" style={{ background: "var(--line)" }} />
@@ -107,16 +113,26 @@ export default function SignUpPage() {
             style={{ borderColor: "var(--line)", color: "var(--ink)" }}
           />
           <div className="space-y-1">
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              minLength={8}
-              required
-              className="w-full rounded-[var(--radius-md)] border px-3 py-2.5 text-sm"
-              style={{ borderColor: "var(--line)", color: "var(--ink)" }}
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                minLength={8}
+                required
+                className="w-full rounded-[var(--radius-md)] border px-3 py-2.5 text-sm"
+                style={{ borderColor: "var(--line)", color: "var(--ink)" }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-sm"
+                style={{ color: "var(--sage)" }}
+              >
+                {showPassword ? <EyeOff /> : <Eye />}
+              </button>
+            </div>
             <p className="text-xs" style={{ color: "var(--sage)" }}>
               Min 8 characters. Include at least one number or symbol.
             </p>

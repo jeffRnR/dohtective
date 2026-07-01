@@ -6,11 +6,13 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import "../frontend/styles/tokens.css";
 import Loader from "../frontend/components/Loader";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function SignInPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,15 +63,25 @@ export default function SignInPage() {
             className="w-full rounded-[var(--radius-md)] border px-3 py-2.5 text-sm"
             style={{ borderColor: "var(--line)", color: "var(--ink)" }}
           />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            className="w-full rounded-[var(--radius-md)] border px-3 py-2.5 text-sm"
-            style={{ borderColor: "var(--line)", color: "var(--ink)" }}
-          />
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full rounded-[var(--radius-md)] border px-3 py-2.5 text-sm"
+              style={{ borderColor: "var(--line)", color: "var(--ink)" }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-sm"
+              style={{ color: "var(--sage)" }}
+            >
+              {showPassword ? <EyeOff /> : <Eye />}
+            </button>
+          </div>
 
           {error ? <p className="text-sm font-medium" style={{ color: "var(--clay)" }}>{error}</p> : null}
 
