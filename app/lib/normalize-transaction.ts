@@ -14,10 +14,30 @@ const OUTFLOW_TYPES = new Set([
   "software", "hardware", "shipping", "freight", "customs", "duty",
 ]);
 
+// Category values that are definitively outflows regardless of what the
+// type column says. This is the fix for CSVs where every row has
+// type="Income" in a source column but the category tells the real story.
+const OUTFLOW_CATEGORIES = new Set([
+  "owner draw", "owner", "draw", "withdrawal",
+  "pettycash", "petty cash",
+  "non-reimbursable", "reimbursable",
+  "stock", "inventory", "purchase",
+  "utility", "utilities",
+  "fuel", "logistics",
+  "supplier", "services",
+  "salary", "salaries", "payroll",
+  "rent", "lease",
+  "insurance",
+  "subscription", "software", "hardware",
+  "equipment", "maintenance", "repairs",
+  "shipping", "freight", "customs", "duty",
+  "tax", "misc",
+  "operating", "cost", "bill", "expense",
+]);
+
 export function classifyType(rawType: string, amount: number): string {
-  // If the extractor already resolved to the canonical form, trust it.
-  // This matters because extract_csv.py correctly classifies paid_in/
-  // withdrawn/debit/credit columns before this function ever runs.
+  // Canonical form — extractor already resolved this via paid_in/withdrawn
+  // columns. Trust it completely.
   if (rawType === "Income") return "Income";
   if (rawType === "Expense") return "Expense";
 
@@ -26,8 +46,7 @@ export function classifyType(rawType: string, amount: number): string {
   if (INFLOW_TYPES.has(n)) return "Income";
   if (OUTFLOW_TYPES.has(n)) return "Expense";
 
-  // Category-based inference — for User A whose file has no type column
-  // but has a category like "Owner Draw", "Stock", "Rent"
+  // Substring inference
   if (n.includes("draw") || n.includes("withdrawal")) return "Expense";
   if (n.includes("sale") || n.includes("revenue") || n.includes("income")) return "Income";
   if (n.includes("expense") || n.includes("cost") || n.includes("fee")) return "Expense";
@@ -37,14 +56,10 @@ export function classifyType(rawType: string, amount: number): string {
   if (n.includes("loan") || n.includes("repay") || n.includes("interest")) return "Expense";
   if (n.includes("invoice") || n.includes("receipt") || n.includes("payment received")) return "Income";
 
-  // Sign-based last resort — only reliable when amount hasn't been Math.abs'd yet.
-  // For manual uploads amount is always positive at this point, so this is
-  // genuinely ambiguous. Default to Expense since most unclassified rows
-  // in an SME context are costs, not revenue.
   if (amount < 0) return "Expense";
 
-  // Truly unknown — mark as Expense conservatively so cash buffer isn't
-  // artificially inflated by unclassified rows being counted as income.
+  // Conservative default — unclassified rows are more likely costs than
+  // revenue in an SME context. Avoids inflating the cash buffer calculation.
   return "Expense";
 }
 
@@ -85,26 +100,44 @@ export function normalizeForEngine(tx: any, index: number): Record<string, any> 
       ? tx.amount
       : parseFloat(tx.amount ?? "0") || 0;
 
-  // Resolution order for type classification:
-  // 1. tx.type === "Income" or "Expense" — extractor already resolved this
-  //    (happens when extract_csv.py detected paid_in/withdrawn/debit/credit
-  //    columns). Trust it completely — do not re-classify.
-  // 2. tx.type is a raw category string like "Revenue", "Supplier", "Owner Draw"
-  //    — pass through classifyType to map to Income/Expense.
-  // 3. tx.category — for User A whose file has no type column but has a
-  //    category column with meaningful values.
-  // 4. Fallback to conservative Expense classification.
+  // ── Type resolution order ─────────────────────────────────────────────
+  // 1. Category override — if the category is definitively an outflow
+  //    (e.g. "Owner Draw", "Stock", "Reimbursable"), trust it over the
+  //    type column. This fixes CSVs where the source file has type="Income"
+  //    on every row but the category tells the real story.
+  // 2. tx.type === "Income" or "Expense" — extractor resolved this from
+  //    paid_in/withdrawn/debit/credit columns. Trust it.
+  // 3. tx.type is a raw string — pass through classifyType.
+  // 4. tx.category / tx.category_name — fallback when no type column.
+  // 5. Conservative Expense default for truly unknown rows.
+
+  const rawCategory = (
+    tx.category ?? tx.category_name ?? ""
+  ).trim().toLowerCase().replace(/-/g, " ");
+
+  const categoryIsDefinitiveOutflow = OUTFLOW_CATEGORIES.has(rawCategory);
+
   const rawType =
-    tx.type && tx.type !== "CSV" && tx.type !== "EXCEL" &&
-    tx.type !== "MPESA" && tx.type !== "PDF"
+    tx.type &&
+    tx.type !== "CSV" &&
+    tx.type !== "EXCEL" &&
+    tx.type !== "MPESA" &&
+    tx.type !== "PDF"
       ? tx.type
-      : tx.category ?? tx.category_name ?? "";
+      : rawCategory;
+
+  // Category overrides a generic "Income" type from the source column —
+  // but not an "Expense" type (no need to downgrade a correct classification).
+  const resolvedType =
+    categoryIsDefinitiveOutflow && rawType === "Income"
+      ? "Expense"
+      : classifyType(rawType, amount);
 
   return {
     transaction_id: tx.id ?? `manual-${index}`,
     date: parseDate(tx.date),
     branch: tx.branch ?? "Main",
-    type: classifyType(rawType, amount),
+    type: resolvedType,
     account_name: tx.account_name ?? "Manual Upload",
     category_name: tx.category ?? tx.category_name ?? "Uncategorized",
     contact_name: tx.vendor ?? tx.contact_name ?? "Unknown",

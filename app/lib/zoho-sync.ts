@@ -3,33 +3,44 @@ import { prisma } from "./prisma";
 import { zohoApiGet } from "./zoho-client";
 
 // ── Zoho Books v3 response shapes (only the fields we actually use) ───
+// Field names confirmed from live API response — do not guess these.
+//
+// /banktransactions returns:
+//   amount          — always positive regardless of direction
+//   debit_or_credit — "debit" (money out) or "credit" (money in)
+//   payee           — contact name (NOT contact_name)
+//   transaction_type — "vendor_payment", "customer_payment", "expense", etc.
+//
+// /expenses returns:
+//   total                    — always positive
+//   vendor_name              — contact
+//   paid_through_account_name — the bank account used
 
 type ZohoBankTransaction = {
   transaction_id: string;
   date: string;               // "YYYY-MM-DD"
-  transaction_type: string;   // "transfer_fund", "refund", "deposit", etc.
+  transaction_type: string;   // "vendor_payment", "customer_payment", etc.
+  transaction_type_formatted: string;
   account_name: string;
-  category_name?: string;
-  contact_name?: string;
+  payee?: string;             // contact name — Zoho uses "payee" not "contact_name"
   reference_number?: string;
-  payment_mode?: string;
   description?: string;
-  debit_amount?: number;
-  credit_amount?: number;
+  amount: number;             // always positive — direction from debit_or_credit
+  debit_or_credit: string;    // "debit" = money out, "credit" = money in
   status?: string;
-  is_reconciled?: boolean;
+  reconcile_status?: string;
 };
 
 type ZohoExpense = {
   expense_id: string;
   date: string;
-  account_name: string;
-  category_name?: string;
+  account_name: string;             // expense category account (e.g. "Employee Benefits")
+  paid_through_account_name: string; // the actual bank account debited
   vendor_name?: string;
   reference_number?: string;
-  payment_mode?: string;
   description?: string;
-  total: number;
+  total: number;                    // always positive
+  bcy_total?: number;               // base currency total (same as total for KES orgs)
   status?: string;
   is_billable?: boolean;
 };
@@ -93,15 +104,30 @@ export async function syncZohoTransactions(slug: string): Promise<ZohoSyncResult
 
   for (const txn of bankTxns) {
     try {
-      // Zoho uses separate debit/credit fields. We store debits as negative
-      // to match the convention the detection engine expects (negative =
-      // outflow, positive = inflow), mirroring what the CSV normaliser does.
-      const amount =
-        txn.credit_amount && txn.credit_amount > 0
-          ? txn.credit_amount
-          : txn.debit_amount && txn.debit_amount > 0
-          ? -txn.debit_amount
-          : 0;
+      // Zoho returns `amount` as always-positive and uses `debit_or_credit`
+      // to signal direction. "credit" = money in (positive), "debit" = money
+      // out (negative). This matches the sign convention the detection engine
+      // expects from CSV uploads.
+      const isOutflow = txn.debit_or_credit === "debit";
+      const amount = isOutflow ? -Math.abs(txn.amount) : Math.abs(txn.amount);
+
+      // Map transaction_type to the canonical "Income" / "Expense" strings
+      // the detection engine classifiers expect. Fall back to the raw type
+      // for unknown transaction types so cash_buffer.py can still attempt
+      // substring inference.
+      const INFLOW_TYPES = new Set([
+        "customer_payment", "sales_return_refund", "deposit",
+        "interest_income", "other_income", "refund",
+      ]);
+      const OUTFLOW_TYPES = new Set([
+        "vendor_payment", "expense", "transfer_fund", "owner_draw",
+        "bill_payment", "purchase_order", "advance_payment",
+      ]);
+      const canonicalType = INFLOW_TYPES.has(txn.transaction_type)
+        ? "Income"
+        : OUTFLOW_TYPES.has(txn.transaction_type)
+        ? "Expense"
+        : isOutflow ? "Expense" : "Income"; // sign-based fallback
 
       await prisma.transaction.upsert({
         where: {
@@ -115,32 +141,31 @@ export async function syncZohoTransactions(slug: string): Promise<ZohoSyncResult
           transactionId:   txn.transaction_id,
           date:            new Date(txn.date),
           branch:          "",
-          type:            txn.transaction_type ?? "bank_transaction",
+          type:            canonicalType,
           accountName:     txn.account_name ?? "",
-          categoryName:    txn.category_name ?? "",
-          contactName:     txn.contact_name ?? "",
+          categoryName:    txn.transaction_type_formatted ?? "",
+          contactName:     txn.payee ?? "",
           referenceNumber: txn.reference_number ?? "",
-          paymentMethod:   txn.payment_mode ?? "",
-          description:     txn.description ?? "",
+          paymentMethod:   "",
+          description:     txn.description ?? txn.transaction_type_formatted ?? "",
           amount,
           status:          txn.status ?? "",
           bankAccount:     txn.account_name ?? "",
-          isReconciled:    txn.is_reconciled ?? false,
+          isReconciled:    txn.reconcile_status === "reconciled",
           notes:           "",
         },
         update: {
           date:            new Date(txn.date),
-          type:            txn.transaction_type ?? "bank_transaction",
+          type:            canonicalType,
           accountName:     txn.account_name ?? "",
-          categoryName:    txn.category_name ?? "",
-          contactName:     txn.contact_name ?? "",
+          categoryName:    txn.transaction_type_formatted ?? "",
+          contactName:     txn.payee ?? "",
           referenceNumber: txn.reference_number ?? "",
-          paymentMethod:   txn.payment_mode ?? "",
-          description:     txn.description ?? "",
+          description:     txn.description ?? txn.transaction_type_formatted ?? "",
           amount,
           status:          txn.status ?? "",
           bankAccount:     txn.account_name ?? "",
-          isReconciled:    txn.is_reconciled ?? false,
+          isReconciled:    txn.reconcile_status === "reconciled",
         },
       });
       upserted++;
@@ -173,28 +198,31 @@ export async function syncZohoTransactions(slug: string): Promise<ZohoSyncResult
           date:            new Date(exp.date),
           branch:          "",
           type:            "Expense",
-          accountName:     exp.account_name ?? "",
-          categoryName:    exp.category_name ?? "",
+          // account_name on expenses is the expense category (e.g. "Employee
+          // Benefits") — use it as categoryName. paid_through_account_name is
+          // the actual bank account debited — use it as bankAccount/accountName.
+          accountName:     exp.paid_through_account_name ?? exp.account_name ?? "",
+          categoryName:    exp.account_name ?? "",
           contactName:     exp.vendor_name ?? "",
           referenceNumber: exp.reference_number ?? "",
-          paymentMethod:   exp.payment_mode ?? "",
+          paymentMethod:   "",
           description:     exp.description ?? "",
           amount:          -(Math.abs(exp.total)),
           status:          exp.status ?? "",
-          bankAccount:     exp.account_name ?? "",
+          bankAccount:     exp.paid_through_account_name ?? exp.account_name ?? "",
           isReconciled:    false,
           notes:           "",
         },
         update: {
           date:            new Date(exp.date),
-          accountName:     exp.account_name ?? "",
-          categoryName:    exp.category_name ?? "",
+          accountName:     exp.paid_through_account_name ?? exp.account_name ?? "",
+          categoryName:    exp.account_name ?? "",
           contactName:     exp.vendor_name ?? "",
           referenceNumber: exp.reference_number ?? "",
-          paymentMethod:   exp.payment_mode ?? "",
           description:     exp.description ?? "",
           amount:          -(Math.abs(exp.total)),
           status:          exp.status ?? "",
+          bankAccount:     exp.paid_through_account_name ?? exp.account_name ?? "",
         },
       });
       upserted++;
