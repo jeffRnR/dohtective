@@ -76,7 +76,7 @@ async function fetchAllPages<T>(
 // ── Main export ───────────────────────────────────────────────────────
 
 export type ZohoSyncResult = {
-  upserted: number;
+  upserted: number; // rows that are genuinely new or changed
   errors: string[];
 };
 
@@ -89,6 +89,18 @@ export async function syncZohoTransactions(slug: string): Promise<ZohoSyncResult
 
   const errors: string[] = [];
   let upserted = 0;
+
+  // Pre-load existing transaction amounts so we can detect genuine changes.
+  // Only rows with a different amount or type count as "upserted" — this
+  // lets the sync route skip re-analysis when nothing actually changed.
+  const existingMap = new Map<string, { amount: number; type: string }>();
+  const existing = await prisma.transaction.findMany({
+    where: { businessId: business.id },
+    select: { transactionId: true, amount: true, type: true },
+  });
+  for (const row of existing) {
+    existingMap.set(row.transactionId, { amount: row.amount, type: row.type });
+  }
 
   // ── 1. Bank transactions ─────────────────────────────────────────
   let bankTxns: ZohoBankTransaction[] = [];
@@ -129,6 +141,10 @@ export async function syncZohoTransactions(slug: string): Promise<ZohoSyncResult
         ? "Expense"
         : isOutflow ? "Expense" : "Income"; // sign-based fallback
 
+      const prev = existingMap.get(txn.transaction_id);
+      const isNew = !prev;
+      const isChanged = prev && (prev.amount !== amount || prev.type !== canonicalType);
+
       await prisma.transaction.upsert({
         where: {
           businessId_transactionId: {
@@ -168,7 +184,7 @@ export async function syncZohoTransactions(slug: string): Promise<ZohoSyncResult
           isReconciled:    txn.reconcile_status === "reconciled",
         },
       });
-      upserted++;
+      if (isNew || isChanged) upserted++;
     } catch (err) {
       errors.push(`bank txn ${txn.transaction_id}: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -225,7 +241,9 @@ export async function syncZohoTransactions(slug: string): Promise<ZohoSyncResult
           bankAccount:     exp.paid_through_account_name ?? exp.account_name ?? "",
         },
       });
-      upserted++;
+      const expKey = `exp_${exp.expense_id}`;
+      const expPrev = existingMap.get(expKey);
+      if (!expPrev || expPrev.amount !== -(Math.abs(exp.total))) upserted++;
     } catch (err) {
       errors.push(`expense ${exp.expense_id}: ${err instanceof Error ? err.message : String(err)}`);
     }

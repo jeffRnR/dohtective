@@ -51,51 +51,61 @@ export default function BusinessDashboard() {
     load();
   }, [slug]);
 
-  async function syncIfConnected(connected: boolean): Promise<void> {
+  // Fire-and-forget background Zoho sync — does NOT block dashboard render.
+  // Only fires if the last analysis is older than 30 minutes to avoid
+  // hammering the detection service on every page visit.
+  function syncInBackground(connected: boolean, lastAnalysedAt: string | null): void {
     if (!connected) return;
-    setSyncing(true);
-    try {
-      const res = await fetch("/api/zoho/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        if (body.code === "TOKEN_EXPIRED") {
-          setUiNotification(
-            "Your Zoho connection has expired. Please reconnect your Zoho account."
-          );
-          setZohoConnected(false);
-        }
-        console.error("[Zoho sync] failed:", body.error ?? res.statusText);
-      }
-    } catch (err) {
-      console.error("[Zoho sync] network error:", err);
-    } finally {
-      setSyncing(false);
+
+    // Skip sync if report was generated less than 30 minutes ago
+    if (lastAnalysedAt) {
+      const ageMs = Date.now() - new Date(lastAnalysedAt).getTime();
+      const THIRTY_MINUTES = 30 * 60 * 1000;
+      if (ageMs < THIRTY_MINUTES) return;
     }
+
+    fetch("/api/zoho/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          if (body.code === "TOKEN_EXPIRED") {
+            setUiNotification(
+              "Your Zoho connection has expired. Please reconnect your Zoho account."
+            );
+            setZohoConnected(false);
+          }
+          console.error("[Zoho sync] failed:", body.error ?? res.statusText);
+        }
+      })
+      .catch((err) => console.error("[Zoho sync] network error:", err));
+    // Returns immediately — render is not blocked
   }
 
   async function load(forceDisconnectState = false) {
     setLoading(true);
     setError(null);
     try {
-      const statusRes = await fetch(`/api/zoho/oauth/status?slug=${slug}`);
-      const statusData = await statusRes.json();
-      const isConnected =
-        !forceDisconnectState && statusData.connected === true;
-      setZohoConnected(isConnected);
-
-      await syncIfConnected(isConnected);
-
-      const [result, anchorRes, creditsRes] = await Promise.all([
+      // All fast DB-only reads in parallel — no external HTTP calls block this
+      const [statusRes, result, anchorRes, creditsRes] = await Promise.all([
+        fetch(`/api/zoho/oauth/status?slug=${slug}`),
         fetchReport(slug),
         fetch(`/api/anchor/status?slug=${slug}`),
         fetch(`/api/business/${slug}/credits`),
       ]);
 
+      const statusData = await statusRes.json();
+      const isConnected =
+        !forceDisconnectState && statusData.connected === true;
+      setZohoConnected(isConnected);
       setData(result);
+
+      // Kick off Zoho sync in background — skips if report is fresh
+      const lastAnalysedAt = (result as any)?.report?.lastAnalysedAt ?? null;
+      syncInBackground(isConnected, lastAnalysedAt);
 
       if (anchorRes.ok) {
         const anchorData = await anchorRes.json();
@@ -141,17 +151,8 @@ export default function BusinessDashboard() {
     }
   }
 
-  if (loading || syncing) {
-    return (
-      <Loader
-        fullPage
-        label={
-          syncing
-            ? "Syncing your Zoho Books data…"
-            : "Loading your monthly risk report…"
-        }
-      />
-    );
+  if (loading) {
+    return <Loader fullPage label="Loading your report…" />;
   }
 
   if (error || !data) {
