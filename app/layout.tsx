@@ -1,11 +1,9 @@
-// app/layout.tsx
-// ThirdwebProvider removed from root — it was initializing wallet connectors
-// on every page including landing, dashboard, businesses etc. causing slow
-// loads everywhere. It now lives only inside the pricing page where it's needed.
-
+import { Suspense } from "react";
 import "./globals.css";
 import "./frontend/styles/tokens.css";
 import SessionProviderWrapper from "./frontend/components/SessionProviderWrapper";
+import LandingFooter from "./frontend/components/LandingFooter";
+import Loader from "./frontend/components/Loader";
 
 export const metadata = {
   title: "Dohtective",
@@ -16,7 +14,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <SessionProviderWrapper>{children}</SessionProviderWrapper>
+        <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+          <SessionProviderWrapper>
+            <main style={{ flex: 1 }}>
+              <Suspense fallback={<Loader />}>{children}</Suspense>
+            </main>
+          </SessionProviderWrapper>
+          <LandingFooter />
+        </div>
       </body>
     </html>
   );

@@ -8,10 +8,13 @@
 //   $7  USDC (7_000_000 units) → 50 credits  (Growth)
 //   $20 USDC (20_000_000 units) → 200 credits (Enterprise)
 //
-// Thirdweb sends a webhook secret in the x-payload-signature header.
-// We verify it before touching the DB.
+// Security:
+//   - HMAC-SHA256 signature verified against raw request body
+//   - Idempotency: transactionHash checked against usedTxHashes before
+//     crediting — duplicate webhook delivery cannot double top-up
 
 import { NextRequest, NextResponse } from "next/server";
+import { createHmac, timingSafeEqual } from "crypto";
 import { prisma } from "../../../lib/prisma";
 
 function requireEnv(name: string): string {
@@ -20,7 +23,37 @@ function requireEnv(name: string): string {
   return v;
 }
 
-// Credit amounts per USDC tier (in USDC base units, 6 decimals)
+// ── HMAC-SHA256 signature verification ───────────────────────────────────
+// Thirdweb signs the raw request body with your webhook secret using
+// HMAC-SHA256 and sends the hex digest in x-payload-signature.
+// We must read the raw body bytes (before JSON parsing) to verify.
+async function verifyThirdwebSignature(
+  req: NextRequest,
+  rawBody: string
+): Promise<boolean> {
+  const secret = requireEnv("THIRDWEB_WEBHOOK_SECRET");
+  const signature = req.headers.get("x-payload-signature") ?? "";
+
+  if (!signature) return false;
+
+  const expected = createHmac("sha256", secret)
+    .update(rawBody, "utf8")
+    .digest("hex");
+
+  // timingSafeEqual prevents timing attacks that could leak the secret
+  // by measuring how long a comparison takes character by character.
+  try {
+    return timingSafeEqual(
+      Buffer.from(signature, "hex"),
+      Buffer.from(expected, "hex")
+    );
+  } catch {
+    // Buffer lengths differ if signature is malformed — treat as invalid
+    return false;
+  }
+}
+
+// ── Credit tiers ──────────────────────────────────────────────────────────
 const CREDIT_TIERS: Array<{ minUnits: bigint; credits: number; label: string }> = [
   { minUnits: BigInt("20000000"), credits: 200, label: "Enterprise" },
   { minUnits: BigInt("7000000"),  credits: 50,  label: "Growth" },
@@ -33,28 +66,29 @@ function creditsForAmount(amountUnits: bigint): { credits: number; label: string
       return { credits: tier.credits, label: tier.label };
     }
   }
-  // Below minimum — give 1 credit so nothing is silently lost
   return { credits: 1, label: "Custom" };
 }
 
+// ── Handler ───────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  // 1. Verify webhook secret — Thirdweb sends this header
-  const webhookSecret = requireEnv("THIRDWEB_WEBHOOK_SECRET");
-  const signature = req.headers.get("x-payload-signature") ?? "";
+  // Read raw body BEFORE parsing — signature verification needs the exact bytes
+  const rawBody = await req.text();
 
-  if (signature !== webhookSecret) {
-    console.warn("[payment webhook] Invalid signature — rejected");
+  // 1. Verify HMAC-SHA256 signature
+  const valid = await verifyThirdwebSignature(req, rawBody);
+  if (!valid) {
+    console.warn("[payment webhook] Invalid HMAC signature — rejected");
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  // 2. Parse the event payload Thirdweb sends
+  // 2. Parse the verified payload
   let body: {
     event?: {
       eventName?: string;
       data?: {
         businessId?: string;
         payer?: string;
-        amount?: string; // comes as string from JSON
+        amount?: string;
         durationDays?: string;
       };
       transactionHash?: string;
@@ -62,14 +96,13 @@ export async function POST(req: NextRequest) {
   };
 
   try {
-    body = await req.json();
+    body = JSON.parse(rawBody);
   } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
   const event = body.event;
   if (event?.eventName !== "PremiumPaid") {
-    // Not the event we care about — acknowledge and ignore
     return NextResponse.json({ received: true, action: "ignored" });
   }
 
@@ -83,36 +116,48 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (!txHash) {
+    return NextResponse.json(
+      { error: "Missing transactionHash — cannot verify idempotency." },
+      { status: 400 }
+    );
+  }
+
   const amountUnits = BigInt(amount);
   const { credits, label } = creditsForAmount(amountUnits);
 
-  console.log(
-    `[payment webhook] PremiumPaid — business=${businessId} amount=${amount} ` +
-    `→ ${credits} credits (${label}) tx=${txHash}`
-  );
-
-  // 3. Find business by slug and top up credits
+  // 3. Find business and check idempotency before any DB write
   const business = await prisma.business.findUnique({
     where: { slug: businessId },
-    select: { id: true, analysisCredits: true },
+    select: { id: true, analysisCredits: true, usedTxHashes: true },
   });
 
   if (!business) {
     console.error(`[payment webhook] Business not found: ${businessId}`);
-    // Return 200 so Thirdweb doesn't retry endlessly for a slug that doesn't exist
+    // Return 200 — Thirdweb retries on non-2xx, and this slug won't appear later
     return NextResponse.json({ received: true, action: "business_not_found" });
   }
 
+  // 4. Idempotency — reject duplicate webhook delivery for the same tx
+  if (business.usedTxHashes.includes(txHash)) {
+    console.warn(
+      `[payment webhook] Duplicate txHash ${txHash} for ${businessId} — skipping`
+    );
+    return NextResponse.json({ received: true, action: "duplicate_ignored" });
+  }
+
+  // 5. Atomically top up credits and record the tx hash
   await prisma.business.update({
     where: { id: business.id },
     data: {
       analysisCredits: { increment: credits },
+      usedTxHashes: { push: txHash },
     },
   });
 
   console.log(
     `[payment webhook] ✅ Topped up ${businessId}: +${credits} credits ` +
-    `(now ${business.analysisCredits + credits})`
+    `(${label}) payer=${payer ?? "unknown"} tx=${txHash}`
   );
 
   return NextResponse.json({

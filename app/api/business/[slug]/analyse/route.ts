@@ -5,6 +5,7 @@ import {
   requireBusinessMember,
   UnauthorizedError,
 } from "../../../../lib/authz";
+import { analyseRateLimit } from "../../../../lib/rate-limit";
 
 const DETECTION_SERVICE_URL =
   process.env.DETECTION_SERVICE_URL ?? "http://localhost:8123";
@@ -36,6 +37,15 @@ export async function POST(
   const transactions = await prisma.transaction.findMany({
     where: { businessId: business.id },
   });
+
+  // Rate limit — 10 analysis runs per hour per business
+  const rlResult = analyseRateLimit(business.id);
+  if (!rlResult.allowed) {
+    return NextResponse.json(
+      { error: "Too many analysis requests. Try again later.", retryAfterSeconds: rlResult.retryAfterSeconds },
+      { status: 429 }
+    );
+  }
 
   if (transactions.length === 0) {
     return NextResponse.json(
@@ -69,7 +79,10 @@ export async function POST(
   try {
     const analyzeRes = await fetch(`${DETECTION_SERVICE_URL}/analyze`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.DETECTION_ENGINE_SECRET}`,
+      },
       body: JSON.stringify({
         businessId: slug,
         transactions: engineTransactions,

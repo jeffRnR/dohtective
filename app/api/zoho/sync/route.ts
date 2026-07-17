@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireBusinessMember, UnauthorizedError } from "../../../lib/authz";
 import { syncZohoTransactions } from "../../../lib/zoho-sync";
 import { prisma } from "../../../lib/prisma";
+import { zohoSyncRateLimit } from "../../../lib/rate-limit";
 
 const DETECTION_SERVICE_URL =
   process.env.DETECTION_SERVICE_URL ?? "http://localhost:8123";
@@ -31,6 +32,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
     throw err;
+  }
+
+  // Rate limit — 20 sync calls per hour per business
+  const rlResult = zohoSyncRateLimit(business.id);
+  if (!rlResult.allowed) {
+    return NextResponse.json(
+      { error: "Too many sync requests. Try again later.", retryAfterSeconds: rlResult.retryAfterSeconds },
+      { status: 429 }
+    );
   }
 
   const connection = await prisma.zohoConnection.findUnique({
@@ -106,7 +116,10 @@ export async function POST(req: Request) {
 
     const analyzeRes = await fetch(`${DETECTION_SERVICE_URL}/analyze`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.DETECTION_ENGINE_SECRET}`,
+      },
       body: JSON.stringify({
         businessId: slug,
         transactions: engineTransactions,

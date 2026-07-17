@@ -1,3 +1,4 @@
+// app/api/business/[slug]/files/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "../../../../lib/prisma";
 import {
@@ -123,13 +124,7 @@ function runDataQualityGate(rawTransactions: any[]): DataQualityReport {
   const coveragePct = total > 0 ? Math.round((usableRows / total) * 100) : 0;
   const acceptable = coveragePct >= 70;
 
-  return {
-    totalExtracted: total,
-    usableRows,
-    coveragePct,
-    issues,
-    acceptable,
-  };
+  return { totalExtracted: total, usableRows, coveragePct, issues, acceptable };
 }
 
 // ── GET — list all uploaded files ─────────────────────────────────────────
@@ -209,8 +204,6 @@ export async function POST(
   const mimeType = file.type ?? "";
   const fileKind = detectFileKind(originalName, mimeType);
 
-  let rawTransactions: any[] = [];
-
   const extractForm = new FormData();
   extractForm.append(
     "file",
@@ -224,6 +217,11 @@ export async function POST(
     `${DETECTION_SERVICE_URL}/documents/extract`,
     {
       method: "POST",
+      headers: {
+        // No Content-Type — FormData sets it automatically with the
+        // multipart boundary. Only add the auth header.
+        Authorization: `Bearer ${process.env.DETECTION_ENGINE_SECRET}`,
+      },
       body: extractForm,
       signal: AbortSignal.timeout(60_000),
     },
@@ -238,7 +236,7 @@ export async function POST(
   }
 
   const extractData = await extractRes.json();
-  rawTransactions = extractData.transactions ?? [];
+  const rawTransactions: any[] = extractData.transactions ?? [];
 
   if (!Array.isArray(rawTransactions) || rawTransactions.length === 0) {
     return NextResponse.json(

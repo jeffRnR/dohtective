@@ -34,8 +34,7 @@ export default function LandingFooter() {
               <span className="font-display text-lg font-bold" style={{ color: "var(--ink)" }}>Dohtective</span>
             </div>
             <p className="mt-3 max-w-xs text-sm leading-6" style={{ color: "var(--sage)" }}>
-              An AI financial controller built for the messy books of a growing Kenyan SME -
-              not a Fortune 500 audit tool.
+              An AI financial controller built for the messy books of a growing Kenyan SMEs.
             </p>
           </div>
 

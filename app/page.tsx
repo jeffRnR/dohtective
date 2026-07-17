@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import "./frontend/styles/tokens.css";
 import LandingNav from "./frontend/components/LandingNav";
-import LandingFooter from "./frontend/components/LandingFooter";
 import AvalancheTrustStrip from "./frontend/components/AvalancheTrustStrip";
 
 export default function Home() {
@@ -883,8 +882,6 @@ export default function Home() {
           </div>
         </section>
       </main>
-
-      <LandingFooter />
     </div>
   );
 }

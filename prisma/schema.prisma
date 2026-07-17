@@ -1,3 +1,4 @@
+// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -84,8 +85,8 @@ model ReportSnapshot {
   generatedAt DateTime @default(now())
 
   business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  anchorTxHash String? // Avalanche transaction hash, null until anchored
-  anchorStatus String? // "pending" | "anchored" | "failed"
+  anchorTxHash String?
+  anchorStatus String?
 
   @@index([businessId, generatedAt])
 }
@@ -110,7 +111,7 @@ model Business {
 
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
-  analysisCredits     Int      @default(3) // starts with 3 free credits
+  analysisCredits     Int      @default(3)
   lifetimeCreditsUsed Int      @default(0)
   usedTxHashes        String[] @default([])
 }
@@ -127,6 +128,9 @@ model BusinessMember {
   createdAt DateTime @default(now())
 
   @@unique([businessId, userId])
+  // Index on userId so listBusinessesForUser() and requireBusinessMember()
+  // don't full-scan the table as membership count grows.
+  @@index([userId])
 }
 
 model BusinessInvite {
@@ -143,19 +147,16 @@ model BusinessInvite {
   createdAt DateTime @default(now())
 
   @@unique([businessId, email])
+  // Index on email so the createUser event (Google sign-in invite resolution)
+  // doesn't full-scan the table on every new user creation.
+  @@index([email])
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// FLAG RESPONSES — founder feedback on individual flags.
-// Keyed on (businessId, flagTitle) because flags don't have stable IDs
-// across engine runs — the title is the only stable identifier.
-// One row per flag per business, upserted on every response change.
-// ─────────────────────────────────────────────────────────────────────
 model FlagResponse {
   id          String   @id @default(cuid())
   businessId  String
-  flagTitle   String // matches FlagItem.title exactly
-  response    String // 'already_handled' | 'intentional' | 'need_help'
+  flagTitle   String
+  response    String
   respondedAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -211,6 +212,8 @@ model Transaction {
   @@unique([businessId, transactionId])
   @@index([businessId])
   @@index([sourceFileId])
+  // Composite index for date-range queries in cash_buffer analysis
+  @@index([businessId, date])
 }
 
 model Invoice {
@@ -295,7 +298,7 @@ model EmailVerification {
   userId    String   @unique
   tokenHash String
   expiresAt DateTime
-  attempts  Int      @default(0) // max 5 attempts before token invalidated
+  attempts  Int      @default(0)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

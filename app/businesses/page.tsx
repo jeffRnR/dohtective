@@ -458,29 +458,6 @@ export default function BusinessesPage() {
             </div>
           </div>
         )}
-
-        {/* Footer */}
-        <p
-          className="mt-8 text-center text-xs"
-          style={{ color: "var(--sage)" }}
-        >
-          Dohtective {"\u00B7"} Built for Kenyan SMEs {"\u00B7"}{" "}
-          <a
-            href="/pricing"
-            className="underline underline-offset-2"
-            style={{ color: "var(--sage)" }}
-          >
-            Pricing
-          </a>{" "}
-          {"\u00B7"}{" "}
-          <button
-            onClick={() => signOut({ callbackUrl: "/sign-in" })}
-            className="underline underline-offset-2"
-            style={{ color: "var(--sage)" }}
-          >
-            Sign out
-          </button>
-        </p>
       </main>
     </div>
   );

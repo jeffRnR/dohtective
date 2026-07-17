@@ -1,10 +1,28 @@
-// /app/api/analyze/standalone-document/route.ts
+// app/api/analyze/standalone-document/route.ts
+// Public endpoint — no auth required. Called from the landing page sandbox
+// so visitors can try the product without signing up. Does not persist
+// any data, does not touch the DB. Rate-limited by IP to prevent abuse.
+
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "../../../lib/rate-limit";
 
 const DETECTION_SERVICE_URL =
   process.env.DETECTION_SERVICE_URL ?? "http://localhost:8123";
 
 export async function POST(req: NextRequest) {
+  // Rate limit — 5 sandbox analyses per hour per IP
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+    req.headers.get("x-real-ip") ??
+    "unknown";
+  const rl = checkRateLimit(`sandbox:${ip}`, 5, 60 * 60 * 1000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again later." },
+      { status: 429 }
+    );
+  }
+
   let formData: FormData;
   try {
     formData = await req.formData();
@@ -41,6 +59,9 @@ export async function POST(req: NextRequest) {
       `${DETECTION_SERVICE_URL}/documents/extract`,
       {
         method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.DETECTION_ENGINE_SECRET}`,
+        },
         body: extractForm,
         signal: AbortSignal.timeout(60_000),
       }
@@ -75,7 +96,10 @@ export async function POST(req: NextRequest) {
     // Step 2: Run analysis via FastAPI
     const analyzeRes = await fetch(`${DETECTION_SERVICE_URL}/analyze`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.DETECTION_ENGINE_SECRET}`,
+      },
       body: JSON.stringify({ businessId: "sandbox", transactions }),
       signal: AbortSignal.timeout(30_000),
     });
@@ -89,7 +113,6 @@ export async function POST(req: NextRequest) {
     }
 
     const { report } = await analyzeRes.json();
-
     return NextResponse.json({ success: true, report });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

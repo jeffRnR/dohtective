@@ -1,5 +1,5 @@
+# backend/main.py
 """
-backend/main.py
 FastAPI server — the hosted equivalent of the child_process bridge.
 
 Endpoints:
@@ -15,13 +15,15 @@ points here.
 import hashlib
 import json
 import os
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
 
 import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from engine import build_report
@@ -30,12 +32,11 @@ from extract_pdf import extract_transactions as extract_pdf_transactions
 
 app = FastAPI(title="Dohtective Detection Engine", version="1.0.0")
 
-# CORS — Vercel frontend needs to reach this service.
-# In production lock ALLOW_ORIGINS to your actual Vercel domain.
-ALLOW_ORIGINS = os.getenv(
-    "ALLOW_ORIGINS",
-    "*"  # tightened via env var in production
-)
+# ── CORS middleware — must be registered BEFORE the auth middleware ────────
+# CORSMiddleware handles OPTIONS preflight requests. If auth runs first,
+# preflight requests get a 401 before CORS headers are ever set, breaking
+# every browser request.
+ALLOW_ORIGINS = os.getenv("ALLOW_ORIGINS", "*")
 
 app.add_middleware(
     CORSMiddleware,
@@ -44,6 +45,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Auth middleware — registered AFTER CORS ───────────────────────────────
+# Verifies the Bearer token sent by Next.js API routes. /health is exempt
+# so Render/Railway health checks work without credentials.
+DETECTION_ENGINE_SECRET = os.getenv("DETECTION_ENGINE_SECRET", "")
+
+
+@app.middleware("http")
+async def verify_engine_secret(request: Request, call_next):
+    # Health check and CORS preflight are always allowed
+    if request.url.path == "/health" or request.method == "OPTIONS":
+        return await call_next(request)
+
+    if not DETECTION_ENGINE_SECRET:
+        print(
+            "[WARNING] DETECTION_ENGINE_SECRET not set — auth disabled",
+            file=sys.stderr,
+        )
+        return await call_next(request)
+
+    token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    if token != DETECTION_ENGINE_SECRET:
+        return JSONResponse({"detail": "Unauthorized."}, status_code=401)
+
+    return await call_next(request)
+
 
 # ── Request / response models ──────────────────────────────────────────────
 
@@ -55,6 +82,7 @@ class AnalyzeRequest(BaseModel):
     business_billers: List[Dict[str, Any]] = []
     starting_cash_balance: float | None = None
     businessId: str = "unknown"
+
 
 class AnalyzeResponse(BaseModel):
     report: Dict[str, Any]
@@ -76,9 +104,9 @@ def analyze(req: AnalyzeRequest):
     full report from build_report() plus a SHA-256 hash for anchoring.
 
     Called by:
-      - app/api/report/route.ts (dashboard load)
-      - app/api/business/[slug]/analyse/route.ts (manual run analysis)
-      - app/api/business/[slug]/files/[fileId]/route.ts (post-delete re-run)
+      - app/api/business/[slug]/analyse/route.ts (Run Analysis button)
+      - app/api/zoho/sync/route.ts (post-sync analysis)
+      - app/api/analyze/standalone-document/route.ts (landing page sandbox)
     """
     payload = {
         "transactions": req.transactions,
@@ -116,13 +144,11 @@ async def extract_document(
 
     Called by:
       - app/api/business/[slug]/files/route.ts (POST — upload new file)
-      - app/api/documents/route.ts (supporting document upload)
       - app/api/analyze/standalone-document/route.ts (landing page sandbox)
     """
     filename = file.filename or "upload"
     suffix = Path(filename).suffix.lower()
 
-    # Write to a temp file — extractors need a file path, not a stream
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         contents = await file.read()
         tmp.write(contents)
@@ -136,7 +162,7 @@ async def extract_document(
         else:
             raise HTTPException(
                 status_code=415,
-                detail=f"Unsupported file type '{suffix}'. Accepted: .pdf, .csv, .xlsx, .xls"
+                detail=f"Unsupported file type '{suffix}'. Accepted: .pdf, .csv, .xlsx, .xls",
             )
     except HTTPException:
         raise
@@ -152,7 +178,7 @@ async def extract_document(
                 "No transactions could be extracted from this file. "
                 "Make sure it is a standard M-Pesa statement, bank statement, "
                 "or CSV/Excel export with recognisable column headers."
-            )
+            ),
         )
 
     return {
