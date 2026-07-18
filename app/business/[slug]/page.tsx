@@ -11,6 +11,7 @@ import MixedFundsSpotlight from "../../frontend/components/MixedFundsSpotlight";
 import FlagFeed from "../../frontend/components/FlagFeed";
 import ActionPlan from "../../frontend/components/ActionPlan";
 import EvidencePanel, { type EvidencePanelHandle } from "./components/EvidencePanel";
+import ScheduleCard from "./components/ScheduleCard";
 import ZohoConnectBanner from "../../frontend/components/ZohoConnectBanner";
 import AnchorBadge from "../../frontend/components/AnchorBadge";
 
@@ -329,6 +330,7 @@ export default function BusinessDashboard() {
         <BackNavigationButton />
         <CreditsBar />
         <ZohoConnectBanner slug={slug} />
+        <ScheduleCard slug={slug} zohoConnected={zohoConnected} />
         <div
           className="rounded-[var(--radius-lg)] border p-8 sm:p-10 text-center"
           style={{ borderColor: "var(--line)", background: "white" }}
@@ -392,7 +394,7 @@ export default function BusinessDashboard() {
       <CreditsBar />
       <ZohoConnectBanner slug={slug} />
       <IntegrationManagementBlock />
-
+      
       {anchor.anchorStatus && anchor.monthYear && (
         <div
           className="rounded-[var(--radius-md)] border px-4 py-3"
@@ -412,9 +414,9 @@ export default function BusinessDashboard() {
           />
         </div>
       )}
-
+      <ScheduleCard slug={slug} zohoConnected={zohoConnected} />
       <VerdictBand report={data.report} trend={data.trend} />
-
+      
       {sortedFlags.length > 0 && (
         <>
           <MixedFundsSpotlight report={data.report} />

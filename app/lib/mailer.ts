@@ -1,44 +1,52 @@
 // app/lib/mailer.ts
+// Shared nodemailer transporter used by:
+//   - app/api/notify/email/route.ts   (Google Sheets push notification)
+//   - app/lib/scheduled-email.ts      (scheduled analysis summary)
+//   - app/api/cron/analysis/route.ts  (no-credits warning)
+//
+// Extracted here so every email path uses the same transport and we
+// never accidentally create two transporter instances or have the
+// requireEnv call fail in different places.
+
 import nodemailer from "nodemailer";
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD,
-  },
-});
+function requireEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing required env var: ${name}`);
+  return v;
+}
 
-export async function sendVerificationEmail(
-  to: string,
-  otp: string
-): Promise<void> {
+// Lazily created — avoids crashing at import time if env vars are
+// missing in environments where email isn't configured (e.g. test runs).
+let _transporter: nodemailer.Transporter | null = null;
+
+export function getTransporter(): nodemailer.Transporter {
+  if (!_transporter) {
+    _transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: requireEnv("GMAIL_USER"),
+        pass: requireEnv("GMAIL_APP_PASSWORD"),
+      },
+    });
+  }
+  return _transporter;
+}
+
+export type MailOptions = {
+  to: string | string[];
+  subject: string;
+  html: string;
+  text?: string;
+};
+
+export async function sendEmail(opts: MailOptions): Promise<void> {
+  const transporter = getTransporter();
   await transporter.sendMail({
-    from: `"Dohtective" <${process.env.GMAIL_USER}>`,
-    to,
-    subject: "Verify your Dohtective account",
-    text: `Your verification code is: ${otp}\n\nThis code expires in 15 minutes. If you didn't create a Dohtective account, ignore this email.`,
-    html: `
-      <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#fafaf8;border:1px solid #e5e5e0;border-radius:12px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">
-          <div style="width:36px;height:36px;background:#1a1a18;border-radius:6px;display:flex;align-items:center;justify-content:center">
-            <span style="color:white;font-weight:900;font-size:16px">D</span>
-          </div>
-          <span style="font-size:18px;font-weight:700;color:#1a1a18">Dohtective</span>
-        </div>
-        <h2 style="font-size:20px;font-weight:700;color:#1a1a18;margin:0 0 8px">Verify your email</h2>
-        <p style="font-size:14px;color:#6b7280;margin:0 0 24px;line-height:1.6">
-          Enter this code on the verification page to activate your account.
-          It expires in 15 minutes.
-        </p>
-        <div style="background:white;border:1px solid #e5e5e0;border-radius:8px;padding:20px;text-align:center;margin-bottom:24px">
-          <span style="font-size:36px;font-weight:900;letter-spacing:0.15em;color:#1a1a18;font-family:monospace">${otp}</span>
-        </div>
-        <p style="font-size:12px;color:#9ca3af;margin:0;line-height:1.6">
-          If you didn't create a Dohtective account, you can safely ignore this email.
-          Your code will expire automatically.
-        </p>
-      </div>
-    `,
+    from: `"Dohtective" <${requireEnv("GMAIL_USER")}>`,
+    to: Array.isArray(opts.to) ? opts.to.join(", ") : opts.to,
+    subject: opts.subject,
+    html: opts.html,
+    text: opts.text,
   });
 }

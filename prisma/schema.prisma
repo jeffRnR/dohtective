@@ -109,11 +109,12 @@ model Business {
   uploadedFiles   UploadedFile[]
   flagResponses   FlagResponse[]
 
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  analysisCredits     Int      @default(3)
-  lifetimeCreditsUsed Int      @default(0)
-  usedTxHashes        String[] @default([])
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  analysisCredits     Int               @default(3)
+  lifetimeCreditsUsed Int               @default(0)
+  usedTxHashes        String[]          @default([])
+  analysisSchedule    AnalysisSchedule?
 }
 
 model BusinessMember {
@@ -301,4 +302,25 @@ model EmailVerification {
   attempts  Int      @default(0)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AnalysisSchedule {
+  id               String    @id @default(cuid())
+  businessId       String    @unique
+  frequency        String // "daily" | "weekly" | "biweekly" | "monthly"
+  status           String    @default("active") // "active" | "paused"
+  nextRunAt        DateTime
+  lastRunAt        DateTime?
+  lastRunStatus    String? // "success" | "failed" | "skipped_no_credits" | "skipped_no_zoho"
+  lastRunError     String?
+  additionalEmails String[]  @default([])
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Composite index for the cron query:
+  // WHERE status = 'active' AND nextRunAt <= now()
+  @@index([status, nextRunAt])
 }
