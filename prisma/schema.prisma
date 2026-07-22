@@ -22,9 +22,11 @@ model User {
   sentInvites      BusinessInvite[]        @relation("InvitedBy")
   sheetsConnection GoogleSheetsConnection?
 
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
   emailVerification EmailVerification?
+  kotaniCustomerKey String?
+  kotaniOrders      KotaniPaymentOrder[]
 }
 
 model Account {
@@ -109,12 +111,13 @@ model Business {
   uploadedFiles   UploadedFile[]
   flagResponses   FlagResponse[]
 
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
-  analysisCredits     Int               @default(3)
-  lifetimeCreditsUsed Int               @default(0)
-  usedTxHashes        String[]          @default([])
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  analysisCredits     Int                  @default(3)
+  lifetimeCreditsUsed Int                  @default(0)
+  usedTxHashes        String[]             @default([])
   analysisSchedule    AnalysisSchedule?
+  kotaniOrders        KotaniPaymentOrder[]
 }
 
 model BusinessMember {
@@ -323,4 +326,57 @@ model AnalysisSchedule {
   // Composite index for the cron query:
   // WHERE status = 'active' AND nextRunAt <= now()
   @@index([status, nextRunAt])
+}
+
+model KotaniPaymentOrder {
+  id         String @id @default(cuid())
+  businessId String
+  userId     String
+
+  packageId      String
+  creditsToGrant Int
+  amountKes      Int
+
+  kotaniReferenceId String? @unique
+  customerKey       String?
+
+  // pending → deposit_received → completed | failed | expired
+  status String @default("pending")
+
+  depositStatus    String?
+  onchainStatus    String?
+  transactionHash  String? @unique // UNIQUE = idempotency guarantee
+  cryptoAmountUsdc Float?
+
+  rateId    String?
+  rateValue String?
+
+  initiatedAt DateTime  @default(now())
+  completedAt DateTime?
+  expiresAt   DateTime
+
+  phoneNumber String
+  ipAddress   String?
+
+  business  Business         @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  auditLogs KotaniAuditLog[]
+
+  @@index([businessId])
+  @@index([userId])
+  @@index([status, expiresAt])
+  @@index([kotaniReferenceId])
+}
+
+model KotaniAuditLog {
+  id        String   @id @default(cuid())
+  orderId   String
+  event     String
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  order KotaniPaymentOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([createdAt])
 }
