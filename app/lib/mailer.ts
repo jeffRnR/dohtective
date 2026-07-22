@@ -50,3 +50,39 @@ export async function sendEmail(opts: MailOptions): Promise<void> {
     text: opts.text,
   });
 }
+
+export async function sendVerificationEmail(
+  email: string,
+  otp: string
+): Promise<void> {
+  await sendEmail({
+    to: email,
+    subject: "Verify your Dohtective account",
+    text: `Your verification code is: ${otp}
+
+This code expires in 15 minutes.
+
+If you didn't create a Dohtective account, you can ignore this email.`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
+        <h2>Verify your Dohtective account</h2>
+
+        <p>Use the verification code below:</p>
+
+        <div style="
+          font-size:32px;
+          font-weight:bold;
+          letter-spacing:8px;
+          text-align:center;
+          margin:30px 0;
+        ">
+          ${otp}
+        </div>
+
+        <p>This code expires in <strong>15 minutes</strong>.</p>
+
+        <p>If you didn't create this account, you can safely ignore this email.</p>
+      </div>
+    `,
+  });
+}
