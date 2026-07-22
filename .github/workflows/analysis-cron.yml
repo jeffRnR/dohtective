@@ -1,0 +1,33 @@
+name: Dohtective Scheduled Analysis
+
+on:
+  schedule:
+    # Every hour
+    - cron: "0 * * * *"
+
+  # Allows you to run it manually from GitHub
+  workflow_dispatch:
+
+jobs:
+  scheduled-analysis:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Dohtective Scheduler
+        run: |
+          response=$(curl \
+            --silent \
+            --show-error \
+            --write-out "\nHTTP_STATUS:%{http_code}" \
+            --request GET \
+            "${{ secrets.VERCEL_URL }}/api/cron/analysis" \
+            --header "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
+
+          echo "$response"
+
+          status=$(echo "$response" | grep HTTP_STATUS | cut -d':' -f2)
+
+          if [ "$status" != "200" ]; then
+            echo "Scheduler failed"
+            exit 1
+          fi
